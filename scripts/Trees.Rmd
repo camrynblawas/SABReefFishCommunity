@@ -1,0 +1,22 @@
+#Get clean data
+```{r}
+fishdf <- read.csv(here("data", "processeddata", "RFS_AbundanceBiomassDepth.csv"))
+fishdf$date <- as.Date(fishdf$date)
+```
+
+We are interested in how the reef fish community has changed over time and want to build a tree based model of what environmental factors drive distributions of fishes
+
+Variables we could include: 
+ - Location (Lat/Long)
+ - Date
+ - Family
+ - Length
+ - Weight
+ - Sex
+ - Maturity
+ - Depth
+ - Temperature (surface/bottom)
+ - Salinity (surface/bottom)
+ - Dissolved Oxygen (surface/bottom)
+ 
+ 
