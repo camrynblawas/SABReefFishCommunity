@@ -81,7 +81,7 @@ decade <- mutate(fishdfpost2010, decade = floor_decade(year))
 
 ggplot(data = sab) + geom_sf() + geom_point(data = decade , aes(y = latitudestart, x = longitudestart), size = 0.5) + xlab("Longitude") + ylab("Latitude") +  theme(legend.position = "none") + facet_wrap(~decade) + ggtitle("Sampling Effort over Time") + my_theme()
 
-ggsave(here("figures", "SamplingEffortby5yrs.png"), width = 6, height = 5, unit = "in")
+# ggsave(here("figures", "SamplingEffortby5yrs.png"), width = 6, height = 5, unit = "in")
 ```
 
 Sampling effort seems fine, but I would prefer to have station IDs. 
@@ -160,4 +160,24 @@ fishdfpost2010 <- fishdfpost2010 %>% filter(bdo > 0)
 #Write final cleaned
 ```{r}
 write.csv(fishdfpost2010, here("data", "processeddata", "RFS_AbundanceBiomassDepth.csv"))
+```
+
+#Merge with specimen and length data
+We just want total length, so we'll select len1
+```{r}
+specimen <- read.csv(here("data", "processeddata", "RFS_Specimen.csv"))
+specimen <- unique(specimen)
+specimen <- specimen %>% dplyr::select(eventname, date, year, month, speciescommonname, speciesscientificname, duration, len1, weight, sexdescription, maturitydescription, diseasedesc)
+fishdfpost2010 <- fishdfpost2010 %>% dplyr::select(eventname, date, year, month, eventname, family, speciesscientificname, speciescommonname, numbertotal, speciestotalweight, tempsurface, tempbottom, salinitysurface, salinitybottom, sdo, bdo, latitudestart, latitudeend, depthstart, duration)
+
+fishdfpost2010merged <- merge(fishdfpost2010, specimen, by = c("eventname", "date", "year", "month", "speciesscientificname"))
+
+# write.csv(fishdfpost2010merged, here("data", "processeddata", "RFS_AbundanceBiomassDepthLength.csv"))
+
+#This is the same length information I don't want it
+# length <- read.csv(here("data", "processeddata", "RFS_Length.csv"))
+# length <- length %>% dplyr::select(eventname, date, year, month, speciescommonname, speciesscientificname, length)
+# fishdfpost2010merged <- merge(fishdfpost2010merged, length, by = c("eventname", "date", "year", "month", "speciesscientificname"))
+
+
 ```

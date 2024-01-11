@@ -1,3 +1,28 @@
+#Load libraries
+```{r}
+library(tidyverse)
+library(here)
+library(ggmap)
+library(ggpmisc)
+library(stringr)
+library(sf)
+library(sp)
+library(spatialEco)
+library(rnaturalearth)
+library(taxize)
+#check here
+here::here()
+
+library(tidymodels)
+library(tidyflow)
+library(rpart.plot)
+library(vip)
+library(baguette)
+library(ranger)
+
+my_theme <- function() {theme_bw() + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), plot.title = element_text(size=12, face= "bold", colour= "black"), axis.title.x = element_text(size=12, face="bold", colour = "black"), axis.title.y = element_text(size=12, face="bold", colour = "black"))}
+```
+
 #Get clean data
 ```{r}
 fishdf <- read.csv(here("data", "processeddata", "RFS_AbundanceBiomassDepth.csv"))
@@ -18,5 +43,10 @@ Variables we could include:
  - Temperature (surface/bottom)
  - Salinity (surface/bottom)
  - Dissolved Oxygen (surface/bottom)
+ 
+#Select variables of interest
+```{r}
+fishdf <- fishdf %>% dplyr::select(date, year, month, speciesscientificname, speciestotalweight, tempsurface, tempbottom, salinitysurface, salinitybottom, sdo, bdo, latitudestart, longitudestart, depthstart, family)
+```
  
  
