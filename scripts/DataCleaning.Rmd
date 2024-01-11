@@ -89,7 +89,7 @@ uniquescinames <- unique(uniquescinames)
 #I set an API key for ENTREZ but hopefully no one else needs to 
 #this throws 400 errors like crazy -- start loop over from wherever it stops to fix
 #for CALAMUS options, just hit enter
-for(i in 8:nrow(uniquescinames)) {
+for(i in 1:nrow(uniquescinames)) {
   familyinfo <- tax_name(uniquescinames$speciesscientificname[[i]], get = 'family', db = 'ncbi')
   uniquescinames$family[i] <- familyinfo$family
   print(paste("done", i))
@@ -120,13 +120,13 @@ cleandf$tempsurface <- as.numeric(cleandf$tempsurface)
 cleandf <- filter(cleandf, tempsurface != 0)
 
 #export processed
-write.csv(df, here("data", "processeddata", "RFS_AbundanceBiomass.csv"))
+# write.csv(df, here("data", "processeddata", "RFS_AbundanceBiomass.csv"))
 ```
 
 #Event
 ```{r}
 #Event data (only need depth)
-event <- read.csv(here("data", "rawdata", "cblawas.Reef Fish Survey.EVENT.2023-08-31T17.00.10.csv"))
+event <- read.csv(here("data", "rawdata", "cblawas.Reef Fish Survey.EVENT.2024-01-11T11.18.10.csv"))
 names(event) <- tolower(names(event))
 event <- filter(event, projectagency == "=SCDNR-MARMAP")
 event <- event %>% dplyr::select(date, eventname, collectionnumber, depthstart, depthend, duration)
@@ -146,15 +146,15 @@ event <- event %>% dplyr::select(eventname, depthstart, depthend, duration)
 
 ```{r}
 #merge event and abundance biomass to get depth
-new <- merge(df, event, by = "eventname")
+cleandfwevent <- merge(cleandf, event, by = "eventname")
 
 #export data with depths to processed
-# write.csv(new, here("data", "processeddata", "RFS_AbundanceBiomassDepth.csv"))
+# write.csv(cleandfwevent, here("data", "processeddata", "RFS_AbundanceBiomassDepth.csv"))
 ```
 
 ```{r}
 #check out length data
-length <- read.csv(here("data", "rawdata", "cblawas.Reef Fish Survey.LENGTHFREQUENCY.2023-09-04T22.21.03.csv"))
+length <- read.csv(here("data", "rawdata", "cblawas.Reef Fish Survey.LENGTHFREQUENCY.2024-01-11T11.19.34.csv"))
 names(length) <- tolower(names(length))
 length <- filter(length, projectagency == "=SCDNR-MARMAP")
 length <- length %>% dplyr::select(date, eventname, collectionnumber, speciescommonname, speciesscientificname, speciescode, lengthunits, lengthtypecode, length, numbermeasure, totalnumber, tempsurface, tempbottom, salinitysurface, salinitybottom, sdo, bdo, latitudestart, latitudeend, longitudestart, longitudeend)
@@ -171,7 +171,7 @@ length <- length[!is.na(length$date),]
 
 ```{r}
 #check out specimen data
-specimen <- read.csv(here("data", "rawdata", "cblawas.Reef Fish Survey.SPECIMEN.2023-09-04T22.18.50.csv"))
+specimen <- read.csv(here("data", "rawdata", "cblawas.Reef Fish Survey.SPECIMEN.2024-01-11T11.47.58.csv"))
 names(specimen) <- tolower(names(specimen))
 specimen <- filter(specimen, projectagency == "=SCDNR-MARMAP")
 specimen <- specimen %>% dplyr::select(date, eventname, collectionnumber, speciescommonname, speciesscientificname, speciescode, duration, speciestotalweight, len1, len1_type, len2, len2_type, len3, len3_type, len4, len4_type, orglenunits, weight, orgwtunits, estimatedweight, sexdescription, maturitydescription, diseasedesc, baittype, tempsurface, tempbottom, salinitysurface, salinitybottom, sdo, bdo, latitudestart, latitudeend, longitudestart, longitudeend )
@@ -184,6 +184,10 @@ specimen <- specimen[!is.na(specimen$date),]
 # write.csv(specimen, here("data", "processeddata", "RFS_Specimen.csv"))
 ```
 
+#Post cleaning
+We are interested in how the reef fish community has changed over time. We could do a multidimensional analysis of community composition, a tree based model of what environmental factors drive distributions of fishes, 
+
+
 ```{r}
 #mapping info
 myLocation <- c(min(df$longitudestart)-2, min(df$latitudestart)-2,max(df$longitudestart)+2,max(df$latitudestart)+2)
@@ -194,7 +198,7 @@ myMap <- get_map(location=myLocation, source="stamen", color="bw")
 
 ```{r}
 #sampling effort EDA
-ggplot(data = df, mapping = aes(x = year, y = month)) + geom_point()
+ggplot(data = cleandf, mapping = aes(x = year, y = month)) + geom_point()
 
 #seems like early and late months maybe shouldn't be sampled
 df %>% group_by(month) %>% ggplot(mapping = aes(x = year, y = speciestotalweight)) + geom_point() + geom_line() + facet_wrap(~month)
@@ -344,22 +348,4 @@ df_extract_2_2 <- dplyr::select(df_extract_2_2, date, year, month, eventname, co
 
 #export processed
 # write.csv(df_extract_2_2, here("data", "processeddata", "RFS_AbundanceBiomassDepthRangeLimit.csv"))
-```
-
-#Possible stations
-```{r}
-floor_decade = function(value){ return(value - value %% 10) }
-stations <- read_csv(here("data", "rawdata", "stationssampled.csv"))
-stations_longer <- stations %>% pivot_longer(cols = !StationNumber, names_to = "year", values_to = "count")
-stations_longer <- filter(stations_longer, year != "Total")
-stations_longer$year <- as.numeric(stations_longer$year)
-stations_longer <- mutate(stations_longer, decade = floor_decade(year))
-stations_longer <- stations_longer %>% group_by(StationNumber, decade) %>% summarise(count = sum(count, na.rm = TRUE))
-stations_sampled <- filter(stations_longer, count != 0)
-stations_wider <- pivot_wider(stations_sampled, names_from = decade, values_from = count)
-stations_wider <- na.omit(stations_wider)
-stationsloc <- read_csv(here("data", "rawdata", "possibleStations.csv"))
-finalstations <- merge(stations_wider, stationsloc, by = "StationNumber")
-write.csv(finalstations, here("data", "processeddata", "resampledstations.csv"))
-
 ```
