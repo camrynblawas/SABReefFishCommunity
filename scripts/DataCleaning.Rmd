@@ -3,14 +3,9 @@
 #libraries
 library(tidyverse)
 library(here)
-library(tidyverse)
 library(ggmap)
 library(ggpmisc)
 library(stringr)
-library(sf)
-library(sp)
-library(spatialEco)
-library(rnaturalearth)
 library(taxize)
 #check here
 here::here()
@@ -120,7 +115,7 @@ cleandf$tempsurface <- as.numeric(cleandf$tempsurface)
 cleandf <- filter(cleandf, tempsurface != 0)
 
 #export processed
-# write.csv(df, here("data", "processeddata", "RFS_AbundanceBiomass.csv"))
+# write.csv(cleandf, here("data", "processeddata", "RFS_AbundanceBiomass.csv"))
 ```
 
 #Event
@@ -184,168 +179,3 @@ specimen <- specimen[!is.na(specimen$date),]
 # write.csv(specimen, here("data", "processeddata", "RFS_Specimen.csv"))
 ```
 
-#Post cleaning
-We are interested in how the reef fish community has changed over time. We could do a multidimensional analysis of community composition, a tree based model of what environmental factors drive distributions of fishes, 
-
-
-```{r}
-#mapping info
-myLocation <- c(min(df$longitudestart)-2, min(df$latitudestart)-2,max(df$longitudestart)+2,max(df$latitudestart)+2)
-myMap <- get_map(location=myLocation, source="stamen", color="bw")
-```
-
-#Sampling effort
-
-```{r}
-#sampling effort EDA
-ggplot(data = cleandf, mapping = aes(x = year, y = month)) + geom_point()
-
-#seems like early and late months maybe shouldn't be sampled
-df %>% group_by(month) %>% ggplot(mapping = aes(x = year, y = speciestotalweight)) + geom_point() + geom_line() + facet_wrap(~month)
-# put this at top
-# df <- filter(df, month %in% 5:9)
-#temperature
-ggplot(data = df, mapping = aes(x = date, y = tempsurface)) + geom_point() + geom_smooth(method = "lm")
-
-#remove temps at 0 (impossible), we can do things without temps but I think we need them
-# put this at top
-# df <- filter(df, tempsurface != 0)
-
-#temperature again
-ggplot(data = df, mapping = aes(x = date, y = tempsurface)) + geom_point() + geom_smooth(method = "lm") + stat_poly_eq(formula = y ~ x, aes(label = paste(..eq.label.., ..p.value.label.., sep = "*`,`~")), parse = TRUE, label.x.npc = "right", vstep = 0.05, size = 2.4)
-
-
-floor_decade = function(value){ return(value - value %% 5) }
-decade <- mutate(df, decade = floor_decade(year))
-
-ggmap(myMap) + geom_point(data = decade , aes(y = latitudestart, x = longitudestart), size = 0.5) + xlab("Longitude") + ylab("Latitude") +  theme(legend.position = "none") + facet_wrap(~decade) + ggtitle("RFS Sampling Effort over Time")
-
-# ggsave(here("figures", "EDA", "SamplingEffortby5yrs.png"), width = 6, height = 5, unit = "in")
-```
-
-
-```{r}
-#Find range of oldest years to make a shapefile
-oldest1990 <- dplyr::filter(df, year == 1990)
-oldest2000 <- dplyr::filter(df, year == 2000)
-
-ggmap(myMap) + geom_point(data = oldest2000, aes(y = latitudestart, x = longitudestart, color = year)) + xlab("Longitude") + ylab("Latitude") +  theme(legend.position = "none") 
-
-#export these to arc (will use 1990 one)
-# write.csv(oldest1990, here("data", "processeddata","reefsurveylocations1990.csv"))
-# write.csv(oldest2000, here("data", "processeddata","reefsurveylocations2000.csv"))
-
-```
-
-#Grid
-```{r}
-tomtates <- df %>% filter(speciescommonname == "TOMTATE")
-#station codes are too unique. going to subset by grid
-tomtates <- tomtates %>% dplyr::select(date, month, year, tempsurface, tempbottom, salinitybottom, salinitysurface, sdo, bdo, duration, depthstart, latitudestart, longitudestart) %>% na.omit
-
-#get spatial data
-world <- ne_countries(scale = "medium", returnclass = "sf")
-# make an object the size and shape of the output you want
-globe_bb <- matrix(c(-83.22,25.23,
-                      -83.22,37.02,
-                      -73.45,37.02,
-                     -73.45, 25.23,
-                     -83.22,25.23), byrow = TRUE, ncol = 2) %>%
-  list() %>% 
-  st_polygon() %>% 
-  st_sfc(., crs = 4326)
-
-
-#checkit
-ggplot(data = world) + geom_sf() +geom_sf(data = globe_bb) +
-    coord_sf(xlim=c(-84, -72), ylim=c(25,38), expand = TRUE) + theme(panel.background = element_rect(fill = "white", colour = "black"))
-
-# generate grid of 128 x 128 tiles (each .5 x .5 degrees)
-globe_grid_18x18 <- st_make_grid(globe_bb, n = c(20, 20), 
-                                 crs = 4326, what = 'polygons') %>%
-  st_sf('geometry' = ., data.frame('ID' = 1:length(.)))
-
-#idk what this does
-coordinates(tomtates) <- ~ longitudestart + latitudestart
-df <- st_as_sf(tomtates)
-
-df <- st_set_crs(df, 4326)
-grid <- globe_grid_18x18
-
-#spatial intersections 2 mon tomtates
-df_extract <- st_intersection(df, grid)
-df_extract_2 <- as.data.frame(df_extract)
-
-#pretty picture
-df_extract_point <- df_extract_2$geometry
-plot(st_geometry(df_extract_point))
-
-
-df_extract_2$gridID <- df_extract_2$ID
-df_extract_2$coords <- do.call(rbind, st_geometry(df_extract_point)) %>% 
-    as_tibble() %>% setNames(c("longitude","latitude"))
-df_extract_2 <- unnest(df_extract_2)
-
-#change to grid id
-df_extract_2$gridID <- df_extract_2$ID
-df_extract_2$coords <- do.call(rbind, st_geometry(df_extract_point)) %>%
-    as_tibble() %>% setNames(c("lon","lat"))
-
-#duplicates ?
-df_extract_2_2 <- df_extract_2[!duplicated(df_extract_2[c("date", "longitude","latitude")]),] 
-
-#plot in squares
-ggplot(data = world) + geom_sf() + geom_sf(data = globe_grid_18x18)  + geom_point(data = df_extract_2_2, aes(x = longitude, y = latitude, color = gridID)) +
-    coord_sf(xlim=c(-84, -72), ylim=c(25,38), expand = TRUE) + theme(panel.background = element_rect(fill = "white", colour = "black")) + ggtitle("Subsetted Points") + ggtitle("Grid Subset") + xlab("Longitude") + ylab("Latitude") 
-
-tomtates <- df_extract_2_2
-```
-
-```{r}
-#subset data only in 1990 survey geographic range
-require(sf)
-shape <- sf::read_sf(file.path(here("data", "rawdata", "shapefiles", "surveypolygons_ExportFeature1.shp")))
-shape <- st_transform(shape, crs = 4326)
-
-#get world map data
-world <- ne_countries(scale = "medium", returnclass = "sf")
-
-#checkit
-ggplot(data = world) + geom_sf() +geom_sf(data = shape, fill = "blue") +
-  coord_sf(xlim=c(-83, -70), ylim=c(25,38), expand = TRUE) + theme(panel.background = element_rect(fill = "white", colour = "black"))
-
-#idk what this does
- coordinates(df) <- ~ longitudestart + latitudestart
-# coordinates(df) <- ~ longitude + latitude
-df <- st_as_sf(df)
-
-df <- st_set_crs(df, 4326)
-grid <- shape
-
-#spatial intersections? 
-df_extract <- st_intersection(df, grid)
-df_extract_2 <- as.data.frame(df_extract)
-
-#pretty picture
-df_extract_point <- df_extract_2$geometry
-plot(st_geometry(df_extract_point))
-
-
-df_extract_2$gridID <- df_extract_2$Class
-df_extract_2$coords <- do.call(rbind, st_geometry(df_extract_point)) %>% 
-  as_tibble() %>% setNames(c("longitude","latitude"))
-df_extract_2 <- unnest(df_extract_2)
-df_extract_2_2 <- df_extract_2[!duplicated(df_extract_2[c("date", "longitude","latitude")]),] 
-ggplot(data = world) + geom_sf() + geom_sf(data = shape)  + geom_point(data = df_extract_2_2, aes(x = longitude, y = latitude)) +
-  coord_sf(xlim=c(-83, -70), ylim=c(25,38), expand = TRUE) + theme(panel.background = element_rect(fill = "white", colour = "black")) + ggtitle(paste( "Subsetted Points")) + ggtitle(paste("Grid Subset")) + xlab("Longitude") + ylab("Latitude")
-
-df_extract_2_2 <- mutate(df_extract_2_2, decade = floor_decade(year))
-
-ggmap(myMap) + geom_point(data = df_extract_2_2 , aes(y = latitude, x = longitude), size = 0.5) + xlab("Longitude") + ylab("Latitude") +  theme(legend.position = "none") + facet_wrap(~decade) + ggtitle("RFS Sampling Effort over Time post Subset")
-# ggsave(here("figures", "EDA", "SamplingEffortby5yrsPostSubset.png"), width = 6, height = 5, unit = "in")
-
-df_extract_2_2 <- dplyr::select(df_extract_2_2, date, year, month, eventname, collectionnumber, speciescommonname, speciesscientificname, family, speciescode, numbertotal, speciestotalweight, speciessubweight, specieswgtprocessed, tempsurface, tempbottom, salinitysurface, salinitybottom, sdo, bdo, latitude, latitudeend, longitude, longitudeend, depthstart, depthend, duration)
-
-#export processed
-# write.csv(df_extract_2_2, here("data", "processeddata", "RFS_AbundanceBiomassDepthRangeLimit.csv"))
-```

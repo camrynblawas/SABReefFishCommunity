@@ -1,0 +1,87 @@
+#Load libraries
+```{r}
+#libraries
+library(tidyverse)
+library(here)
+library(ggmap)
+library(ggpmisc)
+library(stringr)
+library(sf)
+library(sp)
+library(spatialEco)
+library(rnaturalearth)
+library(taxize)
+#check here
+here::here()
+
+my_theme <- function() {theme_bw() + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), plot.title = element_text(size=12, face= "bold", colour= "black"), axis.title.x = element_text(size=12, face="bold", colour = "black"), axis.title.y = element_text(size=12, face="bold", colour = "black"))}
+```
+
+#Get clean data
+```{r}
+fishdf <- read.csv(here("data", "processeddata", "RFS_AbundanceBiomassDepth.csv"))
+fishdf$date <- as.Date(fishdf$date)
+```
+
+#Post cleaning
+We are interested in how the reef fish community has changed over time.
+
+Variables we could include: 
+ - Location (Lat/Long)
+ - Date
+ - Family
+ - Length
+ - Weight
+ - Sex
+ - Maturity
+ - Depth
+ - Temperature (surface/bottom)
+ - Salinity (surface/bottom)
+ - Dissolved Oxygen (surface/bottom)
+
+We could do a multidimensional analysis of community composition, a tree based model of what environmental factors drive distributions of fishes, model of commerically important species. Or all of these :)
+
+#Map
+```{r}
+world <- ne_countries(scale = "medium", returnclass = "sf")
+world <- st_make_valid(world)
+sab <- st_crop(world, xmin = -82, xmax = -76, ymin = 26, ymax = 36)
+
+ggplot(data = sab) + geom_sf() + geom_point(data = fishdf, mapping = aes(x = longitudestart, y = latitudestart)) + labs(title = "All Abundance/Biomass Locations", x = "Longitude", y = "Latitude") + my_theme() + facet_wrap(~year)
+```
+Definitely some changes in sampling effort in 2010 (from website). Let's only use data after 2010. 
+
+```{r}
+fishdfpost2010 <- fishdf %>% dplyr::filter(year > 2009)
+
+ggplot(data = sab) + geom_sf() + geom_point(data = fishdfpost2010, mapping = aes(x = longitudestart, y = latitudestart)) + labs(title = "All Abundance/Biomass Locations", x = "Longitude", y = "Latitude") + my_theme() + facet_wrap(~year)
+```
+
+#Sampling effort
+```{r}
+#sampling effort EDA
+ggplot(data = fishdfpost2010, mapping = aes(x = year, y = month)) + geom_point()
+
+#seems like early and late months maybe shouldn't be sampled
+fishdfpost2010 %>% group_by(month) %>% ggplot(mapping = aes(x = year, y = speciestotalweight)) + geom_point() + geom_line() + facet_wrap(~month)
+
+fishdfpost2010 <- filter(fishdfpost2010, month %in% 5:9)
+#temperature
+ggplot(data = fishdfpost2010, mapping = aes(x = date, y = tempsurface)) + geom_point() + geom_smooth(method = "lm")
+
+#remove temps at 0
+fishdfpost2010 <- filter(fishdfpost2010, tempsurface != 0)
+
+#temperature again
+ggplot(data = fishdfpost2010, mapping = aes(x = date, y = tempsurface)) + geom_point() + geom_smooth(method = "lm") + stat_poly_eq(formula = y ~ x, aes(label = paste(..eq.label.., ..p.value.label.., sep = "*`,`~")), parse = TRUE, label.x.npc = "right", vstep = 0.05, size = 2.4)
+
+
+floor_decade = function(value){ return(value - value %% 5) }
+decade <- mutate(fishdfpost2010, decade = floor_decade(year))
+
+ggplot(data = sab) + geom_sf() + geom_point(data = decade , aes(y = latitudestart, x = longitudestart), size = 0.5) + xlab("Longitude") + ylab("Latitude") +  theme(legend.position = "none") + facet_wrap(~decade) + ggtitle("RFS Sampling Effort over Time")
+
+ggsave(here("figures", "SamplingEffortby5yrs.png"), width = 6, height = 5, unit = "in")
+```
+
+Sampling effort seems fine, but I would prefer to have station IDs. 
