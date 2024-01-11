@@ -102,11 +102,11 @@ topdata <- filter(annualmetrics, speciescommonname %in% topnames)
 
 #abundance top 
 ggplot(data = topdata, mapping = aes(x = year, y = abundance, color = speciescommonname)) + geom_point() + geom_line() + ggtitle("Top 10 Abundance Trends Reef Survey") + my_theme() + labs(x = "Year", y = "Abundance", color = "Species Common Name")
-ggsave(here("figures", "AbundanceTrendsTop10.png"), width = 6, height = 5, unit = "in")
+# ggsave(here("figures", "AbundanceTrendsTop10.png"), width = 6, height = 5, unit = "in")
 
 #biomass top 10
 ggplot(data = topdata, mapping = aes(x = year, y = biomass, color = speciescommonname)) + geom_point() + geom_line() + ggtitle("Top 10 Biomass Trends Reef Survey") + my_theme() + labs(x = "Year", y = "Biomass", color = "Species Common Name") 
-ggsave(here("figures", "BiomassTrendsTop10.png"), width = 6, height = 5, unit = "in")
+# ggsave(here("figures", "BiomassTrendsTop10.png"), width = 6, height = 5, unit = "in")
 
 #top 10 map
 topdataall <- filter(fishdfpost2010, speciescommonname %in% topnames)
@@ -168,7 +168,7 @@ We just want total length, so we'll select len1
 specimen <- read.csv(here("data", "processeddata", "RFS_Specimen.csv"))
 specimen <- unique(specimen)
 specimen <- specimen %>% dplyr::select(eventname, date, year, month, speciescommonname, speciesscientificname, duration, len1, weight, sexdescription, maturitydescription, diseasedesc)
-fishdfpost2010 <- fishdfpost2010 %>% dplyr::select(eventname, date, year, month, eventname, family, speciesscientificname, speciescommonname, numbertotal, speciestotalweight, tempsurface, tempbottom, salinitysurface, salinitybottom, sdo, bdo, latitudestart, latitudeend, depthstart, duration)
+fishdfpost2010 <- fishdfpost2010 %>% dplyr::select(eventname, date, year, month, eventname, family, speciesscientificname, speciescommonname, numbertotal, speciestotalweight, tempsurface, tempbottom, salinitysurface, salinitybottom, sdo, bdo, latitudestart, longitudestart, depthstart, duration)
 
 fishdfpost2010merged <- merge(fishdfpost2010, specimen, by = c("eventname", "date", "year", "month", "speciesscientificname"))
 

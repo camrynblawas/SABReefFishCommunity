@@ -25,7 +25,7 @@ my_theme <- function() {theme_bw() + theme(panel.grid.major = element_blank(), p
 
 #Get clean data
 ```{r}
-fishdf <- read.csv(here("data", "processeddata", "RFS_AbundanceBiomassDepth.csv"))
+fishdf <- read.csv(here("data", "processeddata", "RFS_AbundanceBiomassDepthLength.csv"))
 fishdf$date <- as.Date(fishdf$date)
 ```
 
@@ -46,7 +46,83 @@ Variables we could include:
  
 #Select variables of interest
 ```{r}
-fishdf <- fishdf %>% dplyr::select(date, year, month, speciesscientificname, speciestotalweight, tempsurface, tempbottom, salinitysurface, salinitybottom, sdo, bdo, latitudestart, longitudestart, depthstart, family)
+names(fishdf)
+#there are significantly fewer rows with maturity descriptions 
+fishdf <- fishdf %>% dplyr::select(date, year, month, speciesscientificname, speciescommonname.y, speciestotalweight, tempsurface, tempbottom, salinitysurface, salinitybottom, sdo, bdo, latitudestart, longitudestart, depthstart, family, len1, weight, sexdescription, maturitydescription)
+fishdf <- fishdf %>% drop_na(sexdescription) %>% dplyr::filter(sexdescription != "") %>% dplyr::filter(sexdescription != "NOT TAKEN/UNKNOWN")
+fishdf <- fishdf %>% drop_na(maturitydescription) %>% dplyr::filter(maturitydescription != "") %>% dplyr::filter(maturitydescription != "UNKNOWN")
 ```
- 
- 
+
+#Pick out species of interest
+```{r}
+metrics <- fishdf %>% group_by(speciesscientificname) %>% summarize(abundance = n(), biomass = sum(speciestotalweight, na.rm = TRUE), meansurftemp = mean(tempsurface, na.rm = TRUE), meansurfsal = mean(salinitysurface, na.rm = TRUE), meansurfdo = mean(sdo, na.rm = TRUE))
+
+arrange(metrics, desc(abundance))
+
+#Start with vermillion snapper? "RHOMBOPLITES AURORUBENS"
+```
+
+#Model building
+Lets say we want to know where the heavy snapper are
+```{r}
+snapper <- fishdf %>% dplyr::filter(speciesscientificname == "RHOMBOPLITES AURORUBENS")
+snapper %>% group_by(maturitydescription) %>% count()
+snapperdata <- snapper %>% dplyr::select(year, month, tempsurface, tempbottom, salinitybottom, salinitysurface, sdo, bdo, latitudestart, longitudestart, depthstart, weight, sexdescription, maturitydescription)
+snapperdata <- snapperdata %>% dplyr::filter(maturitydescription %in% c("RIPE", "DEVELOPING; VITELLOGENESIS", "RECENT SPAWN; OLD POFs"))
+
+snapperdata <- snapperdata %>% drop_na(weight)
+```
+#Basic models
+```{r}
+# Define the decision tree and tell it the the dependent
+# variable is continuous ('mode' = 'regression')
+mod1 <- set_engine(decision_tree(mode = "regression"), "rpart")
+
+tflow <-
+  # Plug the data
+  snapperdata %>%
+  # Begin the tidyflow
+  tidyflow(seed = 23151) %>%
+  # Separate the data into training/testing (we are keeping 3/4 of the data for training)
+  plug_split(initial_split, prop = 3/4) %>%
+  # Plug the formula
+  plug_formula(weight ~ .) %>%
+  # Plug the model
+  plug_model(mod1)
+
+vanilla_fit <- fit(tflow)
+tree <- pull_tflow_fit(vanilla_fit)$fit
+rpart.plot(tree)
+```
+Big fish are deeper and more southern
+
+
+#Random forests
+```{r}
+# Define the random forest
+rf_mod <-
+  rand_forest(mode = "regression") %>%
+  set_engine("ranger", importance = "impurity")
+
+# Define the `tidyflow` with the random forest model
+# and include all variables (including scie_score and read_score)
+tflow <-
+  snapperdata %>%
+  tidyflow(seed = 23151) %>%
+  plug_formula(weight ~ .) %>%
+  plug_split(initial_split) %>%
+  plug_model(rf_mod)
+
+res_rf <- tflow %>% fit()
+
+res_rf %>%
+  predict_training() %>%
+  rmse(weight, .pred)
+
+res_rf %>%
+  pull_tflow_fit() %>%
+  .[['fit']] %>%
+  vip() +
+  theme_minimal()
+```
+Biggest drivers are depth and location
