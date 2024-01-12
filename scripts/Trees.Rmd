@@ -274,8 +274,10 @@ for (i in 1:length(top10names)) {
     pull_tflow_fit() %>%
     .[['fit']] %>%
     vip() +
-    theme_minimal() + labs(title = paste0(label, " Random Forest Variable Importances"), x = "Variable", y = "Importance")
+    theme_minimal() + labs(title = paste0(label, " xgboost Variable Importances"), x = "Variable", y = "Importance") + my_theme()
   print(p)
+  ggsave(here("figures", paste0("VariableImportance", label, ".png")), width = 6, height = 4, unit = "in")
+  
 }
 
 finalrmses <- data.frame(unlist(top10names), unlist(rmse))
