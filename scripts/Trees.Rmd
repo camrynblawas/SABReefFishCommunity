@@ -145,6 +145,13 @@ res_rf <- tflow %>% replace_model(rf_mod) %>% fit()
 res_rf %>%
   predict_training() %>%
   rmse(weight, .pred)
+
+#Predict on testing
+rf_rmse <-
+  res_rf %>%
+  predict_testing() %>%
+  rmse(weight, .pred) %>%
+  pull(.estimate)
 ```
 RMSE is slightly smaller, with error of 0.11 grams.
 
@@ -175,5 +182,45 @@ final_mod %>%
   predict_training() %>%
   rmse(weight, .pred)
 ```
-Error is actually worse. Tough.
+RMSE is actually slightly worse. Tough.
+
+#xgboost
+```{r}
+boost_mod <-
+  boost_tree(mode = "regression", trees = 500) %>%
+  set_engine("xgboost")
+
+tflow <-
+  snapperdata %>%
+  tidyflow(seed = 51231) %>%
+  plug_formula(weight ~ .) %>%
+  plug_split(initial_split) %>%
+  plug_model(boost_mod)
+
+res_boost <- fit(tflow)
+
+rmse_gb_train <-
+  res_boost %>%
+  predict_training() %>%
+  rmse(weight, .pred)
+
+rmse_gb_train
+
+```
+Pretty good improvement in RMSE!
+
+#Compare RF and xgboost
+```{r}
+gb_rmse <-
+  res_boost %>%
+  predict_testing() %>%
+  rmse(weight, .pred) %>%
+  pull(.estimate)
+
+c(
+  "Random Forest" = rf_rmse,
+  "Extreme Gradient Boosting" = gb_rmse)
+```
+xgboost performs a little better. Interesting! Let's pick out a few key species and figure out variable importance 
+
 
