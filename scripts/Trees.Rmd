@@ -59,7 +59,14 @@ metrics <- fishdf %>% group_by(speciesscientificname) %>% summarize(abundance = 
 
 arrange(metrics, desc(abundance))
 
+top10 <- metrics %>%                                      
+  arrange(desc(abundance)) %>% 
+  group_by(speciesscientificname) %>% ungroup() %>%
+  slice(1:10)
+
 #Start with vermillion snapper? "RHOMBOPLITES AURORUBENS"
+
+top10names <- top10$speciesscientificname
 ```
 
 #Model building
@@ -221,6 +228,57 @@ c(
   "Random Forest" = rf_rmse,
   "Extreme Gradient Boosting" = gb_rmse)
 ```
-xgboost performs a little better. Interesting! Let's pick out a few key species and figure out variable importance 
+xgboost performs a little better. Interesting! Let's pick out a the top 10 species and figure out variable importance 
 
+#Multiple species
+```{r}
+top10names <- top10names[-6] 
+#Grey triggerfish was giving me trouble
+rmse <- list()
+vips <- list()
+for (i in 1:length(top10names)) {
+  label <- str_to_title(top10names[i])
+  data <- filter(fishdf, speciesscientificname == top10names[i])
+  data <- data %>% dplyr::select(year, month, tempsurface, tempbottom, salinitybottom, salinitysurface, sdo, bdo, latitudestart, longitudestart, depthstart, weight, sexdescription, maturitydescription)
+  data <- data %>% dplyr::filter(maturitydescription %in% c("RIPE", "DEVELOPING; VITELLOGENESIS", "RECENT SPAWN; OLD POFs"))
+  
+  boost_mod <-
+  boost_tree(mode = "regression", trees = 500) %>%
+  set_engine("xgboost")
+
+  tflow <-
+    data %>%
+    tidyflow(seed = 51231) %>%
+    plug_formula(weight ~ .) %>%
+    plug_split(initial_split) %>%
+    plug_model(boost_mod)
+
+  res_boost <- fit(tflow)
+
+  rmse_gb_test <-
+    res_boost %>%
+    predict_testing() %>%
+    rmse(weight, .pred) %>%
+  pull(.estimate)
+
+  rmse[i] <- rmse_gb_test
+  
+ vip <-  res_boost %>%
+    pull_tflow_fit() %>%
+    vip()
+ vip <- vip[["data"]]
+ vip$Species <- label
+ vips[[i]] <- vip
+
+  p <- res_boost %>%
+    pull_tflow_fit() %>%
+    .[['fit']] %>%
+    vip() +
+    theme_minimal() + labs(title = paste0(label, " Random Forest Variable Importances"), x = "Variable", y = "Importance")
+  print(p)
+}
+
+finalrmses <- data.frame(unlist(top10names), unlist(rmse))
+finalvips <- do.call(rbind, vips)
+```
 
