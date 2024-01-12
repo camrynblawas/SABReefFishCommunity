@@ -93,6 +93,12 @@ tflow <-
 vanilla_fit <- fit(tflow)
 tree <- pull_tflow_fit(vanilla_fit)$fit
 rpart.plot(tree)
+
+vanilla_fit %>%
+  pull_tflow_fit() %>%
+  .[['fit']] %>%
+  vip() +
+  theme_minimal() + labs(title = "Vermillion Snapper Decision Tree Variable Importances", x = "Variable", y = "Importance")
 ```
 Big fish are deeper and more southern
 
@@ -123,6 +129,51 @@ res_rf %>%
   pull_tflow_fit() %>%
   .[['fit']] %>%
   vip() +
-  theme_minimal()
+  theme_minimal() + labs(title = "Vermillion Snapper Random Forest Variable Importances", x = "Variable", y = "Importance")
 ```
 Biggest drivers are depth and location
+
+#Tune random forests
+I am going to mess with the "mtry" argument to 1/3 of the amount of variables (about 4), i.e. the number of columns to be used in each split
+```{r}
+rf_mod <-
+  rand_forest(mode = "regression", mtry = 4) %>%
+  set_engine("ranger")
+
+res_rf <- tflow %>% replace_model(rf_mod) %>% fit()
+
+res_rf %>%
+  predict_training() %>%
+  rmse(weight, .pred)
+```
+RMSE is slightly smaller, with error of 0.11 grams.
+
+Let's use tidyflow's grid_regular to obtain an evenly spaced set of values for trees -- we'll divide the data into training/testing, specify a cross-validation and plug in the random forest and a grid_regular
+```{r}
+rf_mod <-
+  rand_forest(mode = "regression",
+              trees = tune()) %>%
+  set_engine("ranger")
+
+tflow <-
+  snapperdata %>% 
+  tidyflow(seed = 2151) %>%
+  plug_split(initial_split) %>%
+  plug_resample(vfold_cv) %>%
+  plug_grid(grid_regular, levels = 10) %>%
+  plug_formula(weight ~ .) %>%
+  plug_model(rf_mod)
+
+tflow
+
+res <- tflow %>% fit()
+res %>% pull_tflow_fit_tuning() %>% autoplot()
+
+final_mod <- res %>% complete_tflow(metric = "rmse")
+
+final_mod %>%
+  predict_training() %>%
+  rmse(weight, .pred)
+```
+Error is actually worse. Tough.
+
