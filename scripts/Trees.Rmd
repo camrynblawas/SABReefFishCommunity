@@ -70,14 +70,15 @@ top10names <- top10$speciesscientificname
 ```
 
 #Model building
-Lets say we want to know where the heavy snapper are
+Lets say we want to know where the spawning snapper are
 ```{r}
 snapper <- fishdf %>% dplyr::filter(speciesscientificname == "RHOMBOPLITES AURORUBENS")
 snapper %>% group_by(maturitydescription) %>% count()
-snapperdata <- snapper %>% dplyr::select(year, month, tempsurface, tempbottom, salinitybottom, salinitysurface, sdo, bdo, latitudestart, longitudestart, depthstart, weight, sexdescription, maturitydescription)
-snapperdata <- snapperdata %>% dplyr::filter(maturitydescription %in% c("RIPE", "DEVELOPING; VITELLOGENESIS", "RECENT SPAWN; OLD POFs"))
-
-snapperdata <- snapperdata %>% drop_na(weight)
+snapperdata <- snapper %>% dplyr::filter(maturitydescription %in% c("RIPE", "DEVELOPING; VITELLOGENESIS", "RECENT SPAWN; OLD POFs"))
+snapperdata$maturitydescription <-  factor(snapperdata$maturitydescription, levels = c("DEVELOPING; VITELLOGENESIS", "RIPE", "RECENT SPAWN; OLD POFs"), ordered = TRUE)
+snapperdata$maturitylevel <- as.numeric(snapperdata$maturitydescription)
+maturitylevels <- snapperdata %>% dplyr::select(maturitydescription, maturitylevel) %>% distinct()
+snapperdata <- snapperdata %>% dplyr::select(year, month, tempsurface, tempbottom, salinitybottom, salinitysurface, sdo, bdo, latitudestart, longitudestart, depthstart, maturitylevel)
 ```
 #Basic models
 ```{r}
@@ -93,7 +94,7 @@ tflow <-
   # Separate the data into training/testing (we are keeping 3/4 of the data for training)
   plug_split(initial_split, prop = 3/4) %>%
   # Plug the formula
-  plug_formula(weight ~ .) %>%
+  plug_formula(maturitylevel ~ .) %>%
   # Plug the model
   plug_model(mod1)
 
@@ -107,8 +108,7 @@ vanilla_fit %>%
   vip() +
   theme_minimal() + labs(title = "Vermillion Snapper Decision Tree Variable Importances", x = "Variable", y = "Importance")
 ```
-Big fish are deeper and more southern
-
+Spawning fish are in warm surface and bottom water
 
 #Random forests
 ```{r}
@@ -122,7 +122,7 @@ rf_mod <-
 tflow <-
   snapperdata %>%
   tidyflow(seed = 23151) %>%
-  plug_formula(weight ~ .) %>%
+  plug_formula(maturitylevel ~ .) %>%
   plug_split(initial_split) %>%
   plug_model(rf_mod)
 
@@ -130,7 +130,7 @@ res_rf <- tflow %>% fit()
 
 res_rf %>%
   predict_training() %>%
-  rmse(weight, .pred)
+  rmse(maturitylevel, .pred)
 
 res_rf %>%
   pull_tflow_fit() %>%
@@ -138,10 +138,10 @@ res_rf %>%
   vip() +
   theme_minimal() + labs(title = "Vermillion Snapper Random Forest Variable Importances", x = "Variable", y = "Importance")
 ```
-Biggest drivers are depth and location
+Biggest drivers are temperature and latitude (basically temperature)
 
 #Tune random forests
-I am going to mess with the "mtry" argument to 1/3 of the amount of variables (about 4), i.e. the number of columns to be used in each split
+I am going to mess with the "mtry" argument to 1/3 of the amount of variables (4), i.e. the number of columns to be used in each split
 ```{r}
 rf_mod <-
   rand_forest(mode = "regression", mtry = 4) %>%
@@ -151,16 +151,16 @@ res_rf <- tflow %>% replace_model(rf_mod) %>% fit()
 
 res_rf %>%
   predict_training() %>%
-  rmse(weight, .pred)
+  rmse(maturitylevel, .pred)
 
 #Predict on testing
 rf_rmse <-
   res_rf %>%
   predict_testing() %>%
-  rmse(weight, .pred) %>%
+  rmse(maturitylevel, .pred) %>%
   pull(.estimate)
 ```
-RMSE is slightly smaller, with error of 0.11 grams.
+RMSE is slightly smaller, with error of 0.578 
 
 Let's use tidyflow's grid_regular to obtain an evenly spaced set of values for trees -- we'll divide the data into training/testing, specify a cross-validation and plug in the random forest and a grid_regular
 ```{r}
@@ -175,7 +175,7 @@ tflow <-
   plug_split(initial_split) %>%
   plug_resample(vfold_cv) %>%
   plug_grid(grid_regular, levels = 10) %>%
-  plug_formula(weight ~ .) %>%
+  plug_formula(maturitylevel ~ .) %>%
   plug_model(rf_mod)
 
 tflow
@@ -187,9 +187,9 @@ final_mod <- res %>% complete_tflow(metric = "rmse")
 
 final_mod %>%
   predict_training() %>%
-  rmse(weight, .pred)
+  rmse(maturitylevel, .pred)
 ```
-RMSE is actually slightly worse. Tough.
+RMSE is slightly better. But still like half a level.
 
 #xgboost
 ```{r}
@@ -200,7 +200,7 @@ boost_mod <-
 tflow <-
   snapperdata %>%
   tidyflow(seed = 51231) %>%
-  plug_formula(weight ~ .) %>%
+  plug_formula(maturitylevel ~ .) %>%
   plug_split(initial_split) %>%
   plug_model(boost_mod)
 
@@ -209,38 +209,38 @@ res_boost <- fit(tflow)
 rmse_gb_train <-
   res_boost %>%
   predict_training() %>%
-  rmse(weight, .pred)
+  rmse(maturitylevel, .pred)
 
 rmse_gb_train
 
 ```
 Pretty good improvement in RMSE!
 
-#Compare RF and xgboost
+#Compare RF and xgboost on testing
 ```{r}
 gb_rmse <-
   res_boost %>%
   predict_testing() %>%
-  rmse(weight, .pred) %>%
+  rmse(maturitylevel, .pred) %>%
   pull(.estimate)
 
 c(
   "Random Forest" = rf_rmse,
   "Extreme Gradient Boosting" = gb_rmse)
 ```
-xgboost performs a little better. Interesting! Let's pick out a the top 10 species and figure out variable importance 
+RF performs a little better. Interesting! Let's pick out a the top 10 species and figure out variable importance 
 
 #Multiple species
 ```{r}
-top10names <- top10names[-6] 
-#Grey triggerfish was giving me trouble
 rmse <- list()
 vips <- list()
 for (i in 1:length(top10names)) {
   label <- str_to_title(top10names[i])
   data <- filter(fishdf, speciesscientificname == top10names[i])
-  data <- data %>% dplyr::select(year, month, tempsurface, tempbottom, salinitybottom, salinitysurface, sdo, bdo, latitudestart, longitudestart, depthstart, weight, sexdescription, maturitydescription)
   data <- data %>% dplyr::filter(maturitydescription %in% c("RIPE", "DEVELOPING; VITELLOGENESIS", "RECENT SPAWN; OLD POFs"))
+  data$maturitydescription <-  factor(data$maturitydescription, levels = c("DEVELOPING; VITELLOGENESIS", "RIPE", "RECENT SPAWN; OLD POFs"), ordered = TRUE)
+  data$maturitylevel <- as.numeric(data$maturitydescription)
+  data <- data %>% dplyr::select(year, month, tempsurface, tempbottom, salinitybottom, salinitysurface, sdo, bdo, latitudestart, longitudestart, depthstart, maturitylevel)
   
   boost_mod <-
   boost_tree(mode = "regression", trees = 500) %>%
@@ -249,7 +249,7 @@ for (i in 1:length(top10names)) {
   tflow <-
     data %>%
     tidyflow(seed = 51231) %>%
-    plug_formula(weight ~ .) %>%
+    plug_formula(maturitylevel ~ .) %>%
     plug_split(initial_split) %>%
     plug_model(boost_mod)
 
@@ -258,7 +258,7 @@ for (i in 1:length(top10names)) {
   rmse_gb_test <-
     res_boost %>%
     predict_testing() %>%
-    rmse(weight, .pred) %>%
+    rmse(maturitylevel, .pred) %>%
   pull(.estimate)
 
   rmse[i] <- rmse_gb_test
