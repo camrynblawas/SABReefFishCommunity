@@ -53,143 +53,92 @@ ggplot(data = sab) + geom_sf() + geom_point(data = fishdf, mapping = aes(x = lon
 
 ggplot(fishdf, mapping = aes(x = year, y = station)) + geom_point(size = 0.5, alpha = 0.5)
 
-#Definitely some changes in sampling effort over time. Let's only use resampled stations and do just after 1995. 
+#Definitely some changes in sampling effort over time. Let's only use resampled stations and do just after 2000. 
 
 resampled <- fishdf  %>%
   group_by(station) %>%
-  filter(all(1995:2019 %in% year)) %>% filter(year > 1994)
+  filter(all(2000:2019 %in% year)) %>% filter(year > 1999)
 
 ggplot(resampled, mapping = aes(x = year, y = station)) + geom_point(size = 0.5, alpha = 0.5)
-```
 
-
-```{r}
-fishdfpost2010 <- fishdf %>% dplyr::filter(year > 2009)
-
-ggplot(data = sab) + geom_sf() + geom_point(data = fishdfpost2010, mapping = aes(x = longitudestart, y = latitudestart)) + labs(title = "All Abundance/Biomass Locations", x = "Longitude", y = "Latitude") + my_theme() + facet_wrap(~year)
+ggplot(data = sab) + geom_sf() + geom_point(data = resampled, mapping = aes(x = longitude, y = latitude)) + labs(title = "All Resampled Abundance/Biomass Locations", x = "Longitude", y = "Latitude") + my_theme() 
 ```
 
 #Sampling effort
 ```{r}
-#sampling effort EDA
-ggplot(data = fishdfpost2010, mapping = aes(x = year, y = month)) + geom_point()
 
-#seems like early and late months maybe shouldn't be sampled
-fishdfpost2010 %>% group_by(month) %>% ggplot(mapping = aes(x = year, y = speciestotalweight)) + geom_point() + geom_line() + facet_wrap(~month)
+#seems like months aren't surveyed equally. Should be fine
+ggplot(resampled, mapping = aes(x = year, y = station)) + geom_point(size = 0.5, alpha = 0.5) + facet_wrap(~month)
 
-fishdfpost2010 <- filter(fishdfpost2010, month %in% 5:9)
 #temperature
-ggplot(data = fishdfpost2010, mapping = aes(x = date, y = tempsurface)) + geom_point() + geom_smooth(method = "lm")
-
-#remove temps at 0
-fishdfpost2010 <- filter(fishdfpost2010, tempsurface != 0)
+ggplot(data = resampled, mapping = aes(x = date, y = sst)) + geom_point() + geom_smooth(method = "lm")
 
 #temperature again
-ggplot(data = fishdfpost2010, mapping = aes(x = date, y = tempsurface)) + geom_point() + geom_smooth(method = "lm") + stat_poly_eq(formula = y ~ x, aes(label = paste(..eq.label.., ..p.value.label.., sep = "*`,`~")), parse = TRUE, label.x.npc = "right", vstep = 0.05, size = 2.4)
+ggplot(data = resampled, mapping = aes(x = date, y = sst)) + geom_point() + geom_smooth(method = "lm") + stat_poly_eq(formula = y ~ x, aes(label = paste(..eq.label.., ..p.value.label.., sep = "*`,`~")), parse = TRUE, label.x.npc = "right", vstep = 0.05, size = 2.4)
 
 
 floor_decade = function(value){ return(value - value %% 5) }
-decade <- mutate(fishdfpost2010, decade = floor_decade(year))
+decade <- mutate(resampled, decade = floor_decade(year))
 
-ggplot(data = sab) + geom_sf() + geom_point(data = decade , aes(y = latitudestart, x = longitudestart), size = 0.5) + xlab("Longitude") + ylab("Latitude") +  theme(legend.position = "none") + facet_wrap(~decade) + ggtitle("Sampling Effort over Time") + my_theme()
+ggplot(data = sab) + geom_sf() + geom_point(data = decade , aes(y = latitude, x = longitude), size = 0.5) + xlab("Longitude") + ylab("Latitude") +  theme(legend.position = "none") + facet_wrap(~decade) + ggtitle("Sampling Effort over Time") + my_theme()
 
-# ggsave(here("figures", "SamplingEffortby5yrs.png"), width = 6, height = 5, unit = "in")
+ggsave(here("figures", "SamplingEffortby5yrs.png"), width = 6, height = 5, unit = "in")
 ```
 
-Sampling effort seems fine, but I would prefer to have station IDs. 
+Sampling effort seems good!
 
 #Abundance and Biomass
 ```{r}
 #Let's start with abundances and biomass trends
-annualmetrics <- fishdfpost2010 %>% group_by(speciescommonname, year) %>% summarize(abundance = sum(numbertotal, na.rm = TRUE), biomass = sum(speciestotalweight, na.rm = TRUE), meansurftemp = mean(tempsurface, na.rm = TRUE), meansurfsal = mean(salinitysurface, na.rm = TRUE), meansurfdo = mean(sdo, na.rm = TRUE), meanlatitude = mean(latitudestart, na.rm = TRUE))
+annualmetrics <- resampled %>% group_by(accepted_name, year) %>% summarize(abundance = sum(num_cpue, na.rm = TRUE), biomass = sum(wgt_cpue, na.rm = TRUE), meansurftemp = mean(sst, na.rm = TRUE), meanlatitude = mean(latitude, na.rm = TRUE))
 
-metrics <- fishdfpost2010 %>% group_by(speciescommonname) %>% summarize(abundance = sum(numbertotal, na.rm = TRUE), biomass = sum(speciestotalweight, na.rm = TRUE), meansurftemp = mean(tempsurface, na.rm = TRUE), meansurfsal = mean(salinitysurface, na.rm = TRUE), meansurfdo = mean(sdo, na.rm = TRUE))
+metrics <- resampled %>% group_by(accepted_name) %>% summarize(abundance = sum(num_cpue, na.rm = TRUE), biomass = sum(wgt_cpue, na.rm = TRUE), meansurftemp = mean(sst, na.rm = TRUE), meanlatitude = mean(latitude, na.rm = TRUE))
 
 arrange(metrics, desc(abundance))
 
 #top 10
 top10 <- head(arrange(metrics, desc(abundance)), n = 10)
-topnames <- top10$speciescommonname
-topdata <- filter(annualmetrics, speciescommonname %in% topnames)
+topnames <- top10$accepted_name
+topdata <- filter(annualmetrics, accepted_name %in% topnames)
 
 #abundance top 
-ggplot(data = topdata, mapping = aes(x = year, y = abundance, color = speciescommonname)) + geom_point() + geom_line() + ggtitle("Top 10 Abundance Trends Reef Survey") + my_theme() + labs(x = "Year", y = "Abundance", color = "Species Common Name")
-# ggsave(here("figures", "AbundanceTrendsTop10.png"), width = 6, height = 5, unit = "in")
+ggplot(data = topdata, mapping = aes(x = year, y = abundance, color = accepted_name)) + geom_point() + geom_line() + ggtitle("Top 10 Abundance Trends Reef Survey") + my_theme() + labs(x = "Year", y = "Abundance", color = "Species Common Name")
+ggsave(here("figures", "AbundanceTrendsTop10.png"), width = 6, height = 5, unit = "in")
 
 #biomass top 10
-ggplot(data = topdata, mapping = aes(x = year, y = biomass, color = speciescommonname)) + geom_point() + geom_line() + ggtitle("Top 10 Biomass Trends Reef Survey") + my_theme() + labs(x = "Year", y = "Biomass", color = "Species Common Name") 
-# ggsave(here("figures", "BiomassTrendsTop10.png"), width = 6, height = 5, unit = "in")
+ggplot(data = topdata, mapping = aes(x = year, y = biomass, color = accepted_name)) + geom_point() + geom_line() + ggtitle("Top 10 Biomass Trends Reef Survey") + my_theme() + labs(x = "Year", y = "Biomass", color = "Species Common Name") 
+ggsave(here("figures", "BiomassTrendsTop10.png"), width = 6, height = 5, unit = "in")
 
 #top 10 map
-topdataall <- filter(fishdfpost2010, speciescommonname %in% topnames)
-ggplot(data = sab) + geom_sf() + geom_point(data = topdataall, aes(y = latitudestart, x = longitudestart, color = speciescommonname)) + xlab("Longitude") + ylab("Latitude") 
+topdataall <- filter(resampled, accepted_name %in% topnames)
+ggplot(data = sab) + geom_sf() + geom_point(data = topdataall, aes(y = latitude, x = longitude, color = accepted_name)) + xlab("Longitude") + ylab("Latitude") 
 
 #families
-families <- fishdfpost2010 %>% group_by(family) %>% summarize(abundance = sum(numbertotal, na.rm = TRUE), biomass = sum(speciestotalweight, na.rm = TRUE))
+families <- resampled %>% group_by(family) %>% summarize(abundance = sum(num_cpue, na.rm = TRUE), biomass = sum(wgt_cpue, na.rm = TRUE))
 arrange(families, desc(abundance))
 
 #one species
-triggerfish <- filter(fishdfpost2010, speciescommonname == "GRAYTRIGGERFISH")
-ggplot(data = sab) + geom_sf()  + geom_point(data = triggerfish, aes(y = latitudestart, x = longitudestart, color = year), size = 0.5) + xlab("Longitude") + ylab("Latitude") 
+croaker <- filter(resampled, accepted_name == "Micropogonias undulatus")
+ggplot(data = sab) + geom_sf()  + geom_point(data = croaker, aes(y = latitude, x = longitude, color = year)) + xlab("Longitude") + ylab("Latitude") 
 
 ```
 
 # Environmental Variables
 ```{r}
 #Temperature
-fishdfpost2010 %>% ggplot(aes(x = date, y = tempsurface)) + geom_point() + geom_smooth(method = "lm") + stat_poly_eq(formula = y ~ x, aes(label = paste(..eq.label.., ..p.value.label.., sep = "*`,`~")), parse = TRUE, label.x.npc = "right", vstep = 0.05, size = 2.4) + labs(title = " Changes in Surface Temperature over Time") + xlab("Date") + ylab("Temperature (\u00B0C)") + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+resampled %>% ggplot(aes(x = date, y = sst)) + geom_point() + geom_smooth(method = "lm") + stat_poly_eq(formula = y ~ x, aes(label = paste(..eq.label.., ..p.value.label.., sep = "*`,`~")), parse = TRUE, label.x.npc = "right", vstep = 0.05, size = 2.4) + labs(title = " Changes in Surface Temperature over Time") + xlab("Date") + ylab("Temperature (\u00B0C)") + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 
-fishdfpost2010 %>% ggplot(aes(x = date, y = tempbottom)) + geom_point() + geom_smooth(method = "lm") + stat_poly_eq(formula = y ~ x, aes(label = paste(..eq.label.., ..p.value.label.., sep = "*`,`~")), parse = TRUE, label.x.npc = "right", vstep = 0.05, size = 2.4) + labs(title = " Changes in Bottom Temperature over Time") + xlab("Date") + ylab("Temperature (\u00B0C)") + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+resampled %>% ggplot(aes(x = date, y = sbt)) + geom_point() + geom_smooth(method = "lm") + stat_poly_eq(formula = y ~ x, aes(label = paste(..eq.label.., ..p.value.label.., sep = "*`,`~")), parse = TRUE, label.x.npc = "right", vstep = 0.05, size = 2.4) + labs(title = " Changes in Bottom Temperature over Time") + xlab("Date") + ylab("Temperature (\u00B0C)") + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 
 #by top 10 species
-topdataall %>% ggplot(aes(x = date, y = tempsurface)) + geom_point() + geom_smooth(method = "lm") + stat_poly_eq(formula = y ~ x, aes(label = paste(..eq.label.., ..p.value.label.., sep = "*`,`~")), parse = TRUE, label.x.npc = "right", vstep = 0.05, size = 2.4) + labs(title = " Changes in Temperature over Time") + facet_wrap(~speciescommonname)  + xlab("Date") + ylab("Temperature (\u00B0C)") + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+topdataall %>% ggplot(aes(x = date, y = sst)) + geom_point() + geom_smooth(method = "lm") + stat_poly_eq(formula = y ~ x, aes(label = paste(..eq.label.., ..p.value.label.., sep = "*`,`~")), parse = TRUE, label.x.npc = "right", vstep = 0.05, size = 2.4) + labs(title = " Changes in Temperature over Time") + facet_wrap(~accepted_name)  + xlab("Date") + ylab("Temperature (\u00B0C)") + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 
-topdata %>% ggplot(aes(x = meansurftemp, y = abundance)) + geom_point() + geom_smooth(method = "lm") + stat_poly_eq(formula = y ~ x, aes(label = paste(..eq.label.., ..p.value.label.., sep = "*`,`~")), parse = TRUE, label.x.npc = "right", vstep = 0.05, size = 2.4) + labs(title = " Changes in Temperature with Abundance") + facet_wrap(~speciescommonname)  + xlab("Temperature (\u00B0C)") + ylab("Abundance") + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+topdata %>% ggplot(aes(x = meansurftemp, y = abundance)) + geom_point() + geom_smooth(method = "lm") + stat_poly_eq(formula = y ~ x, aes(label = paste(..eq.label.., ..p.value.label.., sep = "*`,`~")), parse = TRUE, label.x.npc = "right", vstep = 0.05, size = 2.4) + labs(title = " Changes in Temperature with Abundance") + facet_wrap(~accepted_name)  + xlab("Temperature (\u00B0C)") + ylab("Abundance") + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 
-topdata %>% ggplot(aes(x = meansurftemp, y = biomass)) + geom_point() + geom_smooth(method = "lm") + stat_poly_eq(formula = y ~ x, aes(label = paste(..eq.label.., ..p.value.label.., sep = "*`,`~")), parse = TRUE, label.x.npc = "right", vstep = 0.05, size = 2.4) + labs(title = " Changes in Temperature with Biomass") + facet_wrap(~speciescommonname)  + xlab("Temperature (\u00B0C)") + ylab("Biomass ") + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
-
-#Salinity
-#these look weird
-fishdfpost2010 %>% filter(salinitysurface > 25) %>% ggplot(aes(x = date, y = salinitysurface)) + geom_point() + geom_smooth(method = "lm") + stat_poly_eq(formula = y ~ x, aes(label = paste(..eq.label.., ..p.value.label.., sep = "*`,`~")), parse = TRUE, label.x.npc = "right", vstep = 0.05, size = 2.4) + labs(title = "Changes in Surface Salinity over Time") + xlab("Date") + ylab("ppt") + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
-
-fishdfpost2010 %>% filter(salinitysurface > 25) %>% ggplot(aes(x = date, y = salinitybottom)) + geom_point() + geom_smooth(method = "lm") + stat_poly_eq(formula = y ~ x, aes(label = paste(..eq.label.., ..p.value.label.., sep = "*`,`~")), parse = TRUE, label.x.npc = "right", vstep = 0.05, size = 2.4) + labs(title = "Changes in Bottom Salinity over Time") + xlab("Date") + ylab("ppt") + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
-
-#Take out 0 salinities
-fishdfpost2010 <- fishdfpost2010 %>% filter(salinitysurface != 0)
-fishdfpost2010 <- fishdfpost2010 %>% filter(salinitybottom != 0)
-
-#Dissolved Oxygen
-#these look weird
-fishdfpost2010  %>% ggplot(aes(x = date, y = sdo)) + geom_point() + geom_smooth(method = "lm") + stat_poly_eq(formula = y ~ x, aes(label = paste(..eq.label.., ..p.value.label.., sep = "*`,`~")), parse = TRUE, label.x.npc = "right", vstep = 0.05, size = 2.4) + labs(title = "Changes in Surface Dissolved Oxygen over Time") + xlab("Date") + ylab("mg/dL") + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
-#Take out 0 sdo
-fishdfpost2010 <- fishdfpost2010 %>% filter(sdo > 0)
-
-fishdfpost2010  %>% ggplot(aes(x = date, y = bdo)) + geom_point() + geom_smooth(method = "lm") + stat_poly_eq(formula = y ~ x, aes(label = paste(..eq.label.., ..p.value.label.., sep = "*`,`~")), parse = TRUE, label.x.npc = "right", vstep = 0.05, size = 2.4) + labs(title = "Changes in Bottom Dissolved Oxygen over Time") + xlab("Date") + ylab("mg/dL") + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
-#Take out 0 bdo
-fishdfpost2010 <- fishdfpost2010 %>% filter(bdo > 0)
+topdata %>% ggplot(aes(x = meansurftemp, y = biomass)) + geom_point() + geom_smooth(method = "lm") + stat_poly_eq(formula = y ~ x, aes(label = paste(..eq.label.., ..p.value.label.., sep = "*`,`~")), parse = TRUE, label.x.npc = "right", vstep = 0.05, size = 2.4) + labs(title = " Changes in Temperature with Biomass") + facet_wrap(~accepted_name)  + xlab("Temperature (\u00B0C)") + ylab("Biomass ") + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 ```
 
 #Write final cleaned
 ```{r}
-write.csv(fishdfpost2010, here("data", "processeddata", "RFS_AbundanceBiomassDepth.csv"))
-```
-
-#Merge with specimen and length data
-We just want total length, so we'll select len1
-```{r}
-specimen <- read.csv(here("data", "processeddata", "RFS_Specimen.csv"))
-specimen <- unique(specimen)
-specimen <- specimen %>% dplyr::select(eventname, date, year, month, speciescommonname, speciesscientificname, duration, len1, weight, sexdescription, maturitydescription, diseasedesc)
-fishdfpost2010 <- fishdfpost2010 %>% dplyr::select(eventname, date, year, month, eventname, family, speciesscientificname, speciescommonname, numbertotal, speciestotalweight, tempsurface, tempbottom, salinitysurface, salinitybottom, sdo, bdo, latitudestart, longitudestart, depthstart, duration)
-
-fishdfpost2010merged <- merge(fishdfpost2010, specimen, by = c("eventname", "date", "year", "month", "speciesscientificname"))
-
-# write.csv(fishdfpost2010merged, here("data", "processeddata", "RFS_AbundanceBiomassDepthLength.csv"))
-
-#This is the same length information I don't want it
-# length <- read.csv(here("data", "processeddata", "RFS_Length.csv"))
-# length <- length %>% dplyr::select(eventname, date, year, month, speciescommonname, speciesscientificname, length)
-# fishdfpost2010merged <- merge(fishdfpost2010merged, length, by = c("eventname", "date", "year", "month", "speciesscientificname"))
-
-
+write.csv(resampled, here("data", "processeddata", "Final_SEUS.csv"))
 ```
