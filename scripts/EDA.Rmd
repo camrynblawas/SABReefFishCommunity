@@ -20,9 +20,7 @@ my_theme <- function() {theme_bw() + theme(panel.grid.major = element_blank(), p
 
 #Get clean data
 ```{r}
-
-
-fishdf <- read.csv(here("data", "processeddata", "RFS_AbundanceBiomassDepth.csv"))
+fishdf <- read.csv(here("data", "processeddata", "Clean_SEUS.csv"))
 fishdf$date <- as.Date(fishdf$date)
 ```
 
@@ -33,16 +31,11 @@ Variables we could include:
  - Location (Lat/Long)
  - Date
  - Family
- - Length
  - Weight
- - Sex
- - Maturity
  - Depth
  - Temperature (surface/bottom)
- - Salinity (surface/bottom)
- - Dissolved Oxygen (surface/bottom)
 
-We could do a multidimensional analysis of community composition, a tree based model of what environmental factors drive distributions of fishes, model of commerically important species. Or all of these :)
+We could do a multidimensional analysis of community composition, a tree based model of what environmental factors drive distributions of fishes, model of commercially important species. Or all of these :)
 
 #Map
 ```{r}
@@ -56,9 +49,19 @@ world <- ne_countries(scale = "large", returnclass = "sf")
 world <- st_make_valid(world)
 sab <- st_crop(world, xmin = -82, xmax = -76, ymin = 26, ymax = 36)
 
-ggplot(data = sab) + geom_sf() + geom_point(data = fishdf, mapping = aes(x = longitudestart, y = latitudestart)) + labs(title = "All Abundance/Biomass Locations", x = "Longitude", y = "Latitude") + my_theme() + facet_wrap(~year)
+ggplot(data = sab) + geom_sf() + geom_point(data = fishdf, mapping = aes(x = longitude, y = latitude)) + labs(title = "All Abundance/Biomass Locations", x = "Longitude", y = "Latitude") + my_theme() 
+
+ggplot(fishdf, mapping = aes(x = year, y = station)) + geom_point(size = 0.5, alpha = 0.5)
+
+#Definitely some changes in sampling effort over time. Let's only use resampled stations and do just after 1995. 
+
+resampled <- fishdf  %>%
+  group_by(station) %>%
+  filter(all(1995:2019 %in% year)) %>% filter(year > 1994)
+
+ggplot(resampled, mapping = aes(x = year, y = station)) + geom_point(size = 0.5, alpha = 0.5)
 ```
-Definitely some changes in sampling effort in 2010 (from website). Let's only use data after 2010. 
+
 
 ```{r}
 fishdfpost2010 <- fishdf %>% dplyr::filter(year > 2009)

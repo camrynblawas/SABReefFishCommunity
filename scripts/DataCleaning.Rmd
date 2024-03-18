@@ -6,7 +6,6 @@ library(here)
 library(ggmap)
 library(ggpmisc)
 library(stringr)
-library(taxize)
 library(RCurl)
 #check here
 here::here()
@@ -14,171 +13,27 @@ here::here()
 
 #Download raw data
 ```{r}
-load(here("data", "rawdata", "SEUS_std_clean.RData"))
-rawdf <- data
+# library(devtools)
+# remotes::install_github("AquaAuma/FishGlob_data")
 
+load(here("data", "rawdata", "FishGlob_public_clean.RData"))
+rawdf <- data
+rawdf <- dplyr::filter(rawdf, survey == "SEUS")
 ```
 
-#Abundance and Biomass
+#Get CPUE only
 ```{r}
 #Begin data import and cleaning on abundance and biomass data
-names(rawdf) <- tolower(names(rawdf))
-rawdf <- filter(rawdf, projectagency == "=SCDNR-MARMAP")
-rawdf <- rawdf %>% dplyr::select(date, eventname, collectionnumber, speciescommonname, speciesscientificname, speciescode, numbertotal, speciestotalweight, speciessubweight, specieswgtprocessed, tempsurface, tempbottom, salinitysurface, salinitybottom, sdo, bdo, latitudestart, latitudeend, longitudestart, longitudeend)
-rawdf <- data.frame(apply(rawdf, 2, function(x) {x <- gsub("=", "", x) }))
-rawdf$date <- as.Date(rawdf$date, format = "%m-%d-%Y")
-rawdf$year <- as.numeric(format(rawdf$date, "%Y"))
-rawdf$month <- as.numeric(format(rawdf$date, "%m"))
-rawdf <- rawdf[!is.na(rawdf$date),]
-rawdf$speciestotalweight <- as.numeric(rawdf$speciestotalweight)
-rawdf <- filter(rawdf, speciestotalweight > 0)
-rawdf$latitudestart <- as.numeric(rawdf$latitudestart)
-rawdf$longitudestart <- as.numeric(rawdf$longitudestart)
-backup <- rawdf
+rawdf <- rawdf %>% dplyr::select(year, month, day, station, latitude, longitude, haul_dur, area_swept, depth, sbt, sst, num_cpue, wgt_cpue, accepted_name, family)
 
-#names
-for(i in 1:nrow(rawdf)) {
-  if(rawdf$speciesscientificname[[i]] == "HAEMULON PLUMIERII") {
-    rawdf$speciescommonname[[i]] <- "WHITE GRUNT"
-  }
-  if(rawdf$speciesscientificname[[i]] == "HAEMULON PLUMIERII") {
-    rawdf$speciescommonname[[i]] <- "WHITE GRUNT"
-  }
-  if(rawdf$speciesscientificname[[i]] == "OPSANUS"){
-    rawdf$speciescommonname[[i]] <- "LEOPARD TOArawdfISH"
-  }
-  if(rawdf$speciesscientificname[[i]] == "BODIANUS"){
-    rawdf$speciescommonname[[i]] <- "SPOTFIN HOGFISH"
-  }
-  if(rawdf$speciesscientificname[[i]] == "CONGER"){
-    rawdf$speciescommonname[[i]] <- "CONGER EEL"
-  }
-  if(rawdf$speciesscientificname[[i]] == "EMBLEMARIA"){
-    rawdf$speciescommonname[[i]] <- "SAILFIN BLENNY"
-  }
-  if(rawdf$speciesscientificname[[i]] == "EMBLEMARIA"){
-    rawdf$speciescommonname[[i]] <- "SAILFIN BLENNY"
-  }
-  if(rawdf$speciesscientificname[[i]] == "PAREQUES UMBROSUS"){
-    rawdf$speciescommonname[[i]] <- "CUBBYU"
-  }
-  if(rawdf$speciesscientificname[[i]] == "MURAENA"){
-    rawdf$speciescommonname[[i]] <- "RETICULATE MORAY"
-  }
-  if(rawdf$speciesscientificname[[i]] == "MURAENA"){
-    rawdf$speciescommonname[[i]] <- "RETICULATE MORAY"
-  }
-  if(rawdf$speciescommonname[[i]] == "SCUP"){
-    rawdf$speciescommonname[[i]] <- "STENTOMUSPORGIES"
-  }
-}
+rawdf$date <- as.Date(paste(rawdf$year, rawdf$month, rawdf$day, sep = "-"))
+rawdf$year <- as.numeric(rawdf$year)
+rawdf$month <- as.numeric(rawdf$month)
+rawdf$day <- as.numeric(rawdf$day)
 
-rawdf <- rawdf[!(is.na(rawdf$speciescommonname) | rawdf$speciescommonname==""), ]
-rawdf$speciescommonname <- gsub(" ", "", rawdf$speciescommonname , fixed = TRUE)
+rawdf$sbt <- as.numeric(rawdf$sbt)
+rawdf$sst <- as.numeric(rawdf$sst)
 
-#get families
-uniquescinames <- unique(rawdf$speciesscientificname)
-uniquescinames <- as.data.frame(uniquescinames)
-uniquescinames$speciesscientificname <- uniquescinames$uniquescinames
-uniquescinames <- dplyr::select(uniquescinames, speciesscientificname)
-uniquescinames <- unique(uniquescinames)
-
-#takes 3.5 min
-#I set an API key for ENTREZ but hopefully no one else needs to 
-#this throws 400 errors like crazy -- start loop over from wherever it stops to fix
-#for CALAMUS options, just hit enter
-for(i in 1:nrow(uniquescinames)) {
-  familyinfo <- tax_name(uniquescinames$speciesscientificname[[i]], get = 'family', db = 'ncbi')
-  uniquescinames$family[i] <- familyinfo$family
-  print(paste("done", i))
-}
-uniquescinames$family <- as.character(uniquescinames$family)
-
-backup <- uniquescinames
-
-#taxize couldn't find these
-uniquescinames$family <- ifelse(uniquescinames$speciesscientificname == "HOLOCENTRUS ASCENSIONIS", "Holocentridae", uniquescinames$family)
-uniquescinames$family <- ifelse(uniquescinames$speciesscientificname == "RYPTICUS MACULATUS", "Serranidae", uniquescinames$family)
-
-#said one is a grasshopper 
-uniquescinames$family <- ifelse(uniquescinames$speciesscientificname == "CALAMUS", "Sparidae", uniquescinames$family)
-# write.csv(uniquescinames, here("data", "processeddata", "RFS_Families.csv"))
-
-rawdf <- merge(rawdf, uniquescinames, by = "speciesscientificname")
-
-#what family na's
-nafamily <- dplyr::filter(rawdf, is.na(family))
-#angelfish hybrid??
-```
-
-```{r}
-#eda stuff
-cleandf <- filter(rawdf, month %in% 5:9)
-cleandf$tempsurface <- as.numeric(cleandf$tempsurface)
-cleandf <- filter(cleandf, tempsurface != 0)
-
-#export processed
-# write.csv(cleandf, here("data", "processeddata", "RFS_AbundanceBiomass.csv"))
-```
-
-#Event
-```{r}
-#Event data (only need depth)
-event <- read.csv(here("data", "rawdata", "cblawas.Reef Fish Survey.EVENT.2024-01-11T11.18.10.csv"))
-names(event) <- tolower(names(event))
-event <- filter(event, projectagency == "=SCDNR-MARMAP")
-event <- event %>% dplyr::select(date, eventname, collectionnumber, depthstart, depthend, duration)
-event <- data.frame(apply(event, 2, function(x) {x <- gsub("=", "", x) }))
-event$date <- as.Date(event$date, format = "%m-%d-%Y")
-event$year <- as.numeric(format(event$date, "%Y"))
-event$month <- as.numeric(format(event$date, "%m"))
-event <- event[!is.na(event$date),]
-eventnames <- unique(event$eventname)
-collectionnumbers <- unique(event$collectionnumber)
-event <- event %>% dplyr::select(eventname, depthstart, depthend, duration)
-#ig use event names
-
-#export event data to processed
-# write.csv(df, here("data", "processeddata", "RFS_EventDepth.csv"))
-```
-
-```{r}
-#merge event and abundance biomass to get depth
-cleandfwevent <- merge(cleandf, event, by = "eventname")
-
-#export data with depths to processed
-# write.csv(cleandfwevent, here("data", "processeddata", "RFS_AbundanceBiomassDepth.csv"))
-```
-
-```{r}
-#check out length data
-length <- read.csv(here("data", "rawdata", "cblawas.Reef Fish Survey.LENGTHFREQUENCY.2024-01-11T11.19.34.csv"))
-names(length) <- tolower(names(length))
-length <- filter(length, projectagency == "=SCDNR-MARMAP")
-length <- length %>% dplyr::select(date, eventname, collectionnumber, speciescommonname, speciesscientificname, speciescode, lengthunits, lengthtypecode, length, numbermeasure, totalnumber, tempsurface, tempbottom, salinitysurface, salinitybottom, sdo, bdo, latitudestart, latitudeend, longitudestart, longitudeend)
-length <- data.frame(apply(length, 2, function(x) {x <- gsub("=", "", x) }))
-length$date <- as.Date(length$date, format = "%m-%d-%Y")
-length$year <- as.numeric(format(length$date, "%Y"))
-length$month <- as.numeric(format(length$date, "%m"))
-length <- length[!is.na(length$date),]
-
-# write.csv(length, here("data", "processeddata", "RFS_Length.csv"))
-```
-
-#Specimen
-
-```{r}
-#check out specimen data
-specimen <- read.csv(here("data", "rawdata", "cblawas.Reef Fish Survey.SPECIMEN.2024-01-11T11.47.58.csv"))
-names(specimen) <- tolower(names(specimen))
-specimen <- filter(specimen, projectagency == "=SCDNR-MARMAP")
-specimen <- specimen %>% dplyr::select(date, eventname, collectionnumber, speciescommonname, speciesscientificname, speciescode, duration, speciestotalweight, len1, len1_type, len2, len2_type, len3, len3_type, len4, len4_type, orglenunits, weight, orgwtunits, estimatedweight, sexdescription, maturitydescription, diseasedesc, baittype, tempsurface, tempbottom, salinitysurface, salinitybottom, sdo, bdo, latitudestart, latitudeend, longitudestart, longitudeend )
-specimen <- data.frame(apply(specimen, 2, function(x) {x <- gsub("=", "", x) }))
-specimen$date <- as.Date(specimen$date, format = "%m-%d-%Y")
-specimen$year <- as.numeric(format(specimen$date, "%Y"))
-specimen$month <- as.numeric(format(specimen$date, "%m"))
-specimen <- specimen[!is.na(specimen$date),]
-
-# write.csv(specimen, here("data", "processeddata", "RFS_Specimen.csv"))
+write.csv(rawdf, here("data", "processeddata", "Clean_SEUS.csv"))
 ```
 
