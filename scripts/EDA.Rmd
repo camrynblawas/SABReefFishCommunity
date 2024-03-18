@@ -9,6 +9,7 @@ library(stringr)
 library(sf)
 library(sp)
 library(spatialEco)
+# devtools::install_github("jeffreyevans/spatialEco")
 library(rnaturalearth)
 library(taxize)
 #check here
@@ -43,7 +44,13 @@ We could do a multidimensional analysis of community composition, a tree based m
 
 #Map
 ```{r}
-world <- ne_countries(scale = "medium", returnclass = "sf")
+library(sf)
+library(sp)
+library(spatialEco)
+# devtools::install_github("jeffreyevans/spatialEco")
+library(rnaturalearth)
+
+world <- ne_countries(scale = "large", returnclass = "sf")
 world <- st_make_valid(world)
 sab <- st_crop(world, xmin = -82, xmax = -76, ymin = 26, ymax = 36)
 
