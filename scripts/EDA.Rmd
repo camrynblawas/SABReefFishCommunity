@@ -20,6 +20,8 @@ my_theme <- function() {theme_bw() + theme(panel.grid.major = element_blank(), p
 
 #Get clean data
 ```{r}
+
+
 fishdf <- read.csv(here("data", "processeddata", "RFS_AbundanceBiomassDepth.csv"))
 fishdf$date <- as.Date(fishdf$date)
 ```

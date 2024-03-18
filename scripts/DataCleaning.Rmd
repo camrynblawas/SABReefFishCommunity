@@ -7,13 +7,16 @@ library(ggmap)
 library(ggpmisc)
 library(stringr)
 library(taxize)
+library(RCurl)
 #check here
 here::here()
 ```
 
 #Download raw data
 ```{r}
-rawdf <- read.csv(here("data", "rawdata", "cblawas.Reef Fish Survey.ABUNDANCEBIOMASS.2024-01-09T15.52.46.csv"))
+load(here("data", "rawdata", "SEUS_std_clean.RData"))
+rawdf <- data
+
 ```
 
 #Abundance and Biomass
