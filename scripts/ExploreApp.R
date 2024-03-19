@@ -47,6 +47,8 @@ centerofbiomass$CENTER_LON <- replace(centerofbiomass$CENTER_LON, centerofbiomas
 ####APP
 ui <- fluidPage(
   titlePanel("SEUS Trawl Data"),
+  sidebarLayout(
+    sidebarPanel("Data from FishGlob: Maureaud, A. A., Palacios-Abrantes, J., kitchel, Z., Mannocci, L., Pinsky, M., Fredston, A., … Merigot, B. (2023, January 11). FISHGLOB_data: an integrated database of fish biodiversity sampled with scientific bottom-trawl surveys. https://doi.org/10.31219/osf.io/2bcjw"),
   mainPanel(
     h4("The purpose of this app is to look at trawl data in the South East United States. "),
     tabsetPanel(
@@ -62,6 +64,7 @@ ui <- fluidPage(
       tabPanel(title = "Model CPUE Data", plotOutput("model"), selectInput("species3", label = "Choose a species to display", choices = unique(df$accepted_name)), numericInput("trees", "Number of trees for XGBoost", min = 20, max = 500, value = 250)),
     
     )
+  )
   )
 )
 
