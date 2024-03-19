@@ -32,12 +32,12 @@ df$date <- as.Date(df$date)
 df <- rbind(df, list(0, 0, 0, 0, 0, "NA", 33.8, -78, 0, 0, 0, 0, 0, 0, 0, "NA", "NA", as.Date("2024-03-19")))
 
 #with COB
-dfwbiomass <- df %>% group_by(year, month, accepted_name) %>% mutate(monthlyspeciesbiomass = sum(wgt_cpue), biomass = wgt_cpue, avsst = mean(sst, na.rm = TRUE), avsbt = mean(sbt, na.rm = TRUE),  avdepth = mean(depth, na.rm = TRUE)) 
+dfwbiomass <- df %>% group_by(year, accepted_name) %>% mutate(monthlyspeciesbiomass = sum(wgt_cpue), biomass = wgt_cpue, avsst = mean(sst, na.rm = TRUE), avsbt = mean(sbt, na.rm = TRUE),  avdepth = mean(depth, na.rm = TRUE)) 
 
 centerofbiomass <- dfwbiomass %>% 
   mutate(weightedLAT = (biomass/monthlyspeciesbiomass)*latitude) %>% 
   mutate(weightedLON = (biomass/monthlyspeciesbiomass)*longitude) %>% 
-  group_by(accepted_name, year, month) %>% 
+  group_by(accepted_name, year) %>% 
   summarise(CENTER_LAT = sum(weightedLAT, na.rm = TRUE), CENTER_LON = sum(weightedLON, na.rm = TRUE), avsst = mean(avsst, na.rm = TRUE), avsbt = mean(avsbt, na.rm = TRUE), avdepth = mean(avdepth, na.rm = TRUE))
 
 centerofbiomass$CENTER_LAT <- replace(centerofbiomass$CENTER_LAT, centerofbiomass$CENTER_LAT == 0, NA)
@@ -51,7 +51,7 @@ ui <- fluidPage(
     h4("The purpose of this app is to look at trawl data in the South East United States. "),
     tabsetPanel(
       #For map tab
-      tabPanel(title = "Map", leafletOutput("mymap"), 
+      tabPanel(title = "Map of Center of Biomass", leafletOutput("mymap"), 
                selectInput("species", 
                            label = "Choose a species to display",
                            choices = unique(df$accepted_name))), 
@@ -59,7 +59,7 @@ ui <- fluidPage(
       tabPanel(title = "Plot Center of Biomass Data", plotOutput("temptrendsurf"), selectInput("species2", label = "Choose a species to display", choices = unique(df$accepted_name))),
       
       #For model tab
-      tabPanel(title = "Model CPUE Data", plotOutput("model"), selectInput("species3", label = "Choose a species to display", choices = unique(df$accepted_name)), sliderInput("trees", "Number of trees for XGBoost", min = 20, max = 500, value = 250, step = 10)),
+      tabPanel(title = "Model CPUE Data", plotOutput("model"), selectInput("species3", label = "Choose a species to display", choices = unique(df$accepted_name)), numericInput("trees", "Number of trees for XGBoost", min = 20, max = 500, value = 250)),
     
     )
   )
@@ -68,16 +68,19 @@ ui <- fluidPage(
 server <- function(input, output) {
   #for map tab
   filteredData <- reactive({
-    w <- centerofbiomass 
-    w <- w %>% dplyr::filter(accepted_name == input$species)
+    w <- centerofbiomass %>% dplyr::filter(accepted_name == input$species)
     return(w)
   })
   
   output$mymap <- renderLeaflet({
-    filteredData() %>% 
+    filtered <- filteredData()
+    pal <- colorNumeric(palette = "Blues", domain = filtered$year)
+    filtered %>% 
       leaflet() %>%
       addTiles()   %>%
-      addCircles(lng = ~CENTER_LON, lat = ~CENTER_LAT, color = ~year, popup = ~as.character(accepted_name), label = ~as.character(accepted_name)) 
+      addCircleMarkers(lng = ~CENTER_LON, lat = ~CENTER_LAT, color = ~pal(year),  popup = ~year, label = ~year)  %>%
+      addLegend("bottomright", pal = pal, values = ~year, labFormat = labelFormat(big.mark
+= "", digits = 4),  title = "Year", opacity = 1)
     
   })
   
@@ -100,13 +103,12 @@ server <- function(input, output) {
   })
   
   modelthing <- reactive({
-    treesnum <- input$trees
     df2 <- centerofbiomass %>% dplyr::filter(accepted_name == input$species3) 
     df2 <- df2[, !names(df2) %in% c("accepted_name", "CENTER_LON")]
     label <- unique(paste0(input$species3))
     
     boost_mod <-
-      boost_tree(mode = "regression", trees = treesnum) %>%
+      boost_tree(mode = "regression", trees = input$trees) %>%
       set_engine("xgboost")
     
     tflow <-
@@ -117,29 +119,30 @@ server <- function(input, output) {
       plug_model(boost_mod)
     
     res_boost <- fit(tflow)
-    
-    rmse_gb_test <-
-      res_boost %>%
-      predict_testing() %>%
-      rmse(CENTER_LAT, .pred) %>%
-      pull(.estimate)
-    
-    vip <-  res_boost %>%
-      pull_tflow_fit() %>%
-      vip()
-    vip <- vip[["data"]]
-    
-     p <- res_boost %>%
-      pull_tflow_fit() %>%
-      .[['fit']] %>%
-      vip() +
-      theme_minimal() + labs(title = paste0(label, " xgboost Variable Importances on Center of Biomass Latitude"), x = "Variable", y = "Importance") + my_theme()
-     return(p)
+  
+     return(res_boost)
   })
   
 output$model <- renderPlot({
+  label <- unique(paste0(input$species3))
   q <- modelthing()
-  print(q)
+  
+  rmse_gb_test <-
+    q %>%
+    predict_testing() %>%
+    rmse(CENTER_LAT, .pred) %>%
+    pull(.estimate)
+  
+  vip <-  q %>%
+    pull_tflow_fit() %>%
+    vip()
+  vip <- vip[["data"]]
+  
+  q %>%
+    pull_tflow_fit() %>%
+    .[['fit']] %>%
+    vip() +
+    theme_minimal() + labs(title = paste0(label, " xgboost Variable Importances on Center of Biomass Latitude"), x = "Variable", y = "Importance") + my_theme()
   })
   
 }
