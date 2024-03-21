@@ -51,7 +51,15 @@ sab <- st_crop(world, xmin = -82, xmax = -76, ymin = 26, ymax = 36)
 
 ggplot(data = sab) + geom_sf() + geom_point(data = fishdf, mapping = aes(x = longitude, y = latitude)) + labs(title = "All Abundance/Biomass Locations", x = "Longitude", y = "Latitude") + my_theme() 
 
+floor_decade = function(value){ return(value - value %% 5) }
+decade <- mutate(fishdf, decade = floor_decade(year))
+
+ggplot(data = sab) + geom_sf() + geom_point(data = decade , aes(y = latitude, x = longitude), size = 0.5) + xlab("Longitude") + ylab("Latitude") +  theme(legend.position = "none") + facet_grid(~decade) + ggtitle("Pre-Data Cleaning Sampling Effort over Time") + my_theme() + scale_x_continuous(breaks=seq(-80, -77, 3))
+
+ggsave(here("figures", "PreCleanedSamplingEffortby5yrs.png"), width = 6, height = 5, unit = "in")
+
 ggplot(fishdf, mapping = aes(x = year, y = station)) + geom_point(size = 0.5, alpha = 0.5)
+
 
 #Definitely some changes in sampling effort over time. Let's only use resampled stations and do just after 2000. 
 
@@ -62,6 +70,12 @@ resampled <- fishdf  %>%
 ggplot(resampled, mapping = aes(x = year, y = station)) + geom_point(size = 0.5, alpha = 0.5)
 
 ggplot(data = sab) + geom_sf() + geom_point(data = resampled, mapping = aes(x = longitude, y = latitude)) + labs(title = "All Resampled Abundance/Biomass Locations", x = "Longitude", y = "Latitude") + my_theme() 
+
+decade <- mutate(resampled, decade = floor_decade(year))
+
+ggplot(data = sab) + geom_sf() + geom_point(data = decade , aes(y = latitude, x = longitude), size = 0.5) + xlab("Longitude") + ylab("Latitude") +  theme(legend.position = "none") + facet_grid(~decade) + ggtitle("Post-Cleaning Sampling Effort over Time") + my_theme() + scale_x_continuous(breaks=seq(-80, -77, 3)) + scale_x_continuous(breaks=seq(-80, -77, 3))
+
+ggsave(here("figures", "PostCleanedSamplingEffortby5yrs.png"), width = 6, height = 5, unit = "in")
 ```
 
 #Sampling effort
@@ -87,6 +101,29 @@ ggsave(here("figures", "SamplingEffortby5yrs.png"), width = 6, height = 5, unit 
 
 Sampling effort seems good!
 
+#Bathymetry of sites
+```{r}
+library(ncdf4)
+library(lubridate)
+library(rerddap)
+library(doParallel)
+library(marmap)
+library(geotools)
+library(geosphere)
+
+xlims <- c(-82,-76)
+ylims <- c(26,36)
+bathydata<- getNOAA.bathy(xlims[1], xlims[2], ylims[1], ylims[2])
+
+autoplot.bathy(bathydata, geom=c("r", "c"),coast="TRUE") + 
+  scale_fill_etopo() +
+  ylim(26,36) +
+  xlim(-82,-76)+
+  geom_point(data=resampled, aes(x=longitude, y=latitude),  alpha=1)  + my_theme() + labs(title = "SEUS Bathymetry Data", x = "Longitude", y = "Latitude", fill = "Depth") + guides(color="none")+ scale_fill_gradient2(low="darkblue", mid="lightblue", high="white", na.value = "black") 
+
+ggsave(here("figures", "BathymetryMap.png"), width = 6, height = 5, unit = "in")
+```
+
 #Abundance and Biomass
 ```{r}
 #Let's start with abundances and biomass trends
@@ -101,12 +138,16 @@ top10 <- head(arrange(metrics, desc(abundance)), n = 10)
 topnames <- top10$accepted_name
 topdata <- filter(annualmetrics, accepted_name %in% topnames)
 
+#colors :)
+palette <- c("#88CCEE", "#CC6677", "#DDCC77", "#117733",
+                               "#44AA99", "#999933", "#332288", "#AA4499", "#882255", "#E66101","#6699CC","#E7298A", "#CA0020",  "#525252", "#661100",  "#41B6C4", "#999999")
+
 #abundance top 
-ggplot(data = topdata, mapping = aes(x = year, y = abundance, color = accepted_name)) + geom_point() + geom_line() + ggtitle("Top 10 Abundance Trends Reef Survey") + my_theme() + labs(x = "Year", y = "Abundance", color = "Species Common Name")
+ggplot(data = topdata, mapping = aes(x = year, y = abundance, color = accepted_name)) + geom_point() + geom_line() + ggtitle("Top 10 Species Annual Abundance Trends SEUS") + my_theme() + labs(x = "Year", y = "Abundance", color = "Species Scientific Name") + scale_color_manual(values = palette)
 ggsave(here("figures", "AbundanceTrendsTop10.png"), width = 6, height = 5, unit = "in")
 
 #biomass top 10
-ggplot(data = topdata, mapping = aes(x = year, y = biomass, color = accepted_name)) + geom_point() + geom_line() + ggtitle("Top 10 Biomass Trends Reef Survey") + my_theme() + labs(x = "Year", y = "Biomass", color = "Species Common Name") 
+ggplot(data = topdata, mapping = aes(x = year, y = biomass, color = accepted_name)) + geom_point() + geom_line() + ggtitle("Top 10 Species Annual Biomass Trends SEUS") + my_theme() + labs(x = "Year", y = "Biomass", color = "Species Scientific Name") + scale_color_manual(values = palette)
 ggsave(here("figures", "BiomassTrendsTop10.png"), width = 6, height = 5, unit = "in")
 
 #top 10 map

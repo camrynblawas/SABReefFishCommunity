@@ -29,7 +29,7 @@ fishdf <- read.csv(here("data", "processeddata", "Final_SEUS.csv"))
 fishdf$date <- as.Date(fishdf$date)
 ```
 
-We are interested in how the reef fish community has changed over time and want to build a tree based model of what environmental factors drive distributions of fishes
+We are interested in how the fish community has changed over time and want to build a tree based model of what environmental factors drive distributions of fishes
 
 Variables we could include: 
  - Location (Lat/Long)
@@ -48,9 +48,9 @@ fishdf <- fishdf %>% dplyr::select(date, year, month, accepted_name, family, sta
 
 #Pick out species of interest
 ```{r}
-annualmetrics <- resampled %>% group_by(accepted_name, year) %>% summarize(abundance = sum(num_cpue, na.rm = TRUE), biomass = sum(wgt_cpue, na.rm = TRUE), meansurftemp = mean(sst, na.rm = TRUE), meanlatitude = mean(latitude, na.rm = TRUE))
+annualmetrics <- fishdf %>% group_by(accepted_name, year) %>% summarize(abundance = sum(num_cpue, na.rm = TRUE), biomass = sum(wgt_cpue, na.rm = TRUE), meansurftemp = mean(sst, na.rm = TRUE), meanlatitude = mean(latitude, na.rm = TRUE))
 
-metrics <- resampled %>% group_by(accepted_name) %>% summarize(abundance = sum(num_cpue, na.rm = TRUE), biomass = sum(wgt_cpue, na.rm = TRUE), meansurftemp = mean(sst, na.rm = TRUE), meanlatitude = mean(latitude, na.rm = TRUE))
+metrics <- fishdf %>% group_by(accepted_name) %>% summarize(abundance = sum(num_cpue, na.rm = TRUE), biomass = sum(wgt_cpue, na.rm = TRUE), meansurftemp = mean(sst, na.rm = TRUE), meanlatitude = mean(latitude, na.rm = TRUE))
 
 arrange(metrics, desc(abundance))
 
@@ -217,57 +217,69 @@ c(
   "Random Forest" = rf_rmse,
   "Extreme Gradient Boosting" = gb_rmse)
 ```
-RF performs a little better. Interesting! Let's pick out a the top 10 species and figure out variable importance 
+RF performs a little better. Interesting! Let's pick out a the top 10 species and run xgboost anyway to figure out variable importance 
 
 #Multiple species
 ```{r}
 rmse <- list()
 vips <- list()
-for (i in 1:length(top10names)) {
-  label <- str_to_title(top10names[i])
-  data <- filter(fishdf, accepted_name == top10names[i])
+allnames <- unique(fishdf$accepted_name)
+namestokeep <- list()
+fishdf %>% group_by(accepted_name) %>% summarize(count = n())
+for (i in 1:length(allnames)) {
+  label <- str_to_title(allnames[i])
+  data <- filter(fishdf, accepted_name == allnames[i])
   data <- data %>% dplyr::select(year, month, latitude, longitude, depth, sbt, sst, wgt_cpue) %>% na.omit()
-  
-  boost_mod <-
-  boost_tree(mode = "regression", trees = 500) %>%
-  set_engine("xgboost")
-
-  tflow <-
-    data %>%
-    tidyflow(seed = 51231) %>%
-    plug_formula(wgt_cpue ~ .) %>%
-    plug_split(initial_split) %>%
-    plug_model(boost_mod)
-
-  res_boost <- fit(tflow)
-
-  rmse_gb_test <-
-    res_boost %>%
-    predict_testing() %>%
-    rmse(wgt_cpue, .pred) %>%
-  pull(.estimate)
-
-  rmse[i] <- rmse_gb_test
-  
- vip <-  res_boost %>%
-    pull_tflow_fit() %>%
-    vip()
- vip <- vip[["data"]]
- vip$Species <- label
- vips[[i]] <- vip
-
-  p <- res_boost %>%
-    pull_tflow_fit() %>%
-    .[['fit']] %>%
-    vip() +
-    theme_minimal() + labs(title = paste0(label, " xgboost Variable Importances"), x = "Variable", y = "Importance") + my_theme()
-  print(p)
-  ggsave(here("figures", paste0("VariableImportance", label, ".png")), width = 6, height = 4, unit = "in")
+    if(nrow(data) > 10) {
+      namestokeep <-  c(namestokeep, allnames[i])
+        
+      boost_mod <-
+      boost_tree(mode = "regression", trees = 500) %>%
+      set_engine("xgboost")
+    
+      tflow <-
+        data %>%
+        tidyflow(seed = 51231) %>%
+        plug_formula(wgt_cpue ~ .) %>%
+        plug_split(initial_split) %>%
+        plug_model(boost_mod)
+    
+      res_boost <- fit(tflow)
+    
+      rmse_gb_test <-
+        res_boost %>%
+        predict_testing() %>%
+        rmse(wgt_cpue, .pred) %>%
+      pull(.estimate)
+    
+      rmse[i] <- rmse_gb_test
+      
+     vip <-  res_boost %>%
+        pull_tflow_fit() %>%
+        vip()
+     vip <- vip[["data"]]
+     vip$Species <- label
+     vips[[i]] <- vip
+    
+      p <- res_boost %>%
+        pull_tflow_fit() %>%
+        .[['fit']] %>%
+        vip() +
+        theme_minimal() + labs(title = paste0(label, " xgboost Variable Importances"), x = "Variable", y = "Importance") + my_theme()
+      print(p)
+      # ggsave(here("figures", paste0("VariableImportance", label, ".png")), width = 6, height = 4, unit = "in")
+    }else{
+      print(paste("Not enough data for", allnames[i]))
+    }
   
 }
 
-finalrmses <- data.frame(unlist(top10names), unlist(rmse))
+finalrmses <- data.frame(unlist(namestokeep), unlist(rmse))
 finalvips <- do.call(rbind, vips)
+
+finalvips2 <- finalvips %>% group_by(Species) %>% dplyr::filter(Importance == max(Importance))
+ggplot(finalvips2, mapping = aes(x = Variable)) + geom_bar() + my_theme() + labs(title = "xgboost Highest Variable Importance within each Species Model", x = "Variable", y = "Number of Species with Variable as Important")
+ggsave(here("figures", "SpeciesCountofVariableImportance.png"), width = 6, height = 4, unit = "in")
 ```
 
 #By family
@@ -326,7 +338,7 @@ finalrmses <- data.frame(unlist(namestosave), unlist(rmse))
 finalvips <- do.call(rbind, vips)
 
 finalvips2 <- finalvips %>% group_by(Family) %>% dplyr::filter(Importance == max(Importance))
-ggplot(finalvips2, mapping = aes(x = Variable)) + geom_bar() + my_theme() + labs(title = "xgboost Highest Variable Importance by Family", x = "Variable", y = "Number of Families with Variable as Important")
-ggsave(here("figures", "CountofVariableImportance.png"), width = 6, height = 4, unit = "in")
+ggplot(finalvips2, mapping = aes(x = Variable)) + geom_bar() + my_theme() + labs(title = "xgboost Highest Variable Importance within each Family Model", x = "Variable", y = "Number of Families with Variable as Important")
+ggsave(here("figures", "FamilyCountofVariableImportance.png"), width = 6, height = 4, unit = "in")
 ```
 

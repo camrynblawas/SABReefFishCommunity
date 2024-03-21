@@ -1,0 +1,42 @@
+#Load libraries
+```{r}
+library(tidyverse)
+library(MASS)
+library(here)
+#check here
+here::here()
+library(gjam)
+my_theme <- function() {theme_bw() + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), plot.title = element_text(size=12, face= "bold", colour= "black"), axis.title.x = element_text(size=12, face="bold", colour = "black"), axis.title.y = element_text(size=12, face="bold", colour = "black"))}
+```
+
+#Get clean data
+```{r}
+fishdf <- read.csv(here("data", "processeddata", "Final_SEUS.csv"))
+fishdf$date <- as.Date(fishdf$date)
+```
+
+We are interested in how the reef fish community has changed over time and want to build a tree based model of what environmental factors drive distributions of fishes
+
+Variables we could include: 
+ - Location (Lat/Long)
+ - Date
+ - Family
+ - Weight
+ - Depth
+ - Temperature (surface/bottom)
+ 
+#Select variables of interest
+```{r}
+names(fishdf)
+#there are significantly fewer rows with maturity descriptions 
+fishdf <- fishdf %>% dplyr::select(date, year, month, accepted_name, family, station, latitude, longitude, depth, sbt, sst, num_cpue, wgt_cpue)
+```
+
+#Start model
+```{r}
+f   <- gjamSimData( n = 500, S = 10, typeNames = 'CA' )
+ml  <- list( ng = 1000, burnin = 200, typeNames = f$typeNames )
+out <- gjam( f$formula, f$xdata, f$ydata, modelList = ml )
+pl  <- list( trueValues = f$trueValues, GRIDPLOTS = T )
+gjamPlot( output = out, plotPars = pl )
+```
