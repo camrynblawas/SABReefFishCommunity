@@ -1,4 +1,4 @@
-# SABReefFishCommunity
+# SEUSFishCommunity
 
 The purpose of this repository is to understand community changes in FishGlob_data from the South East US.
 
