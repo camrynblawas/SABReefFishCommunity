@@ -14,6 +14,7 @@ library(shinyWidgets)
 library(tidyverse)
 library(here)
 library(cowplot)
+library(ggpmisc)
 
 
 library(tidymodels)
@@ -97,10 +98,10 @@ server <- function(input, output) {
   output$temptrendsurf <- renderPlot({
     df2 <- tempData()
     label <- unique(paste0(input$species2))
-    p1 <- ggplot(data = df2, mapping = aes(x = year, y = CENTER_LAT)) + geom_smooth(method = "lm", size = 1) + geom_point() + labs(title = paste0(label, " Center of Biomass Latitude over Time"), x = "Date", y = "Latitude") + my_theme()
-    p2 <- ggplot(data = df2, mapping = aes(x = year, y = CENTER_LON)) + geom_smooth(method = "lm", size = 1) + geom_point() + labs(title = paste0(label, " Center of Biomass Longitude over Time"), x = "Date", y = "Latitude") + my_theme()
-    p3 <- ggplot(data = df2, mapping = aes(x = year, y = avsst)) + geom_smooth(method = "lm", size = 1) + geom_point() + labs(title = paste0(label, " Center of Biomass Surface Temperature over Time"), x = "Date", y = "Temperature (Degrees C)") + my_theme()
-    p4 <- ggplot(data = df2, mapping = aes(x = year, y = avdepth)) + geom_smooth(method = "lm", size = 1) + geom_point() + labs(title = paste0(label, " Center of Biomass Depth over Time"), x = "Date", y = "Depth (meters)") + my_theme()
+    p1 <- ggplot(data = df2, mapping = aes(x = year, y = CENTER_LAT)) + geom_smooth(method = "lm", size = 1) + geom_point() + stat_poly_eq(formula = y ~ x, aes(label = paste(..eq.label.., ..rr.label.., ..p.value.label.., sep = "*`,`~")),  parse = TRUE, label.x.npc = "right", vstep = 0.05) +  labs(title = paste0(label, " Center of Biomass Latitude over Time"), x = "Date", y = "Latitude") + my_theme()
+    p2 <- ggplot(data = df2, mapping = aes(x = year, y = CENTER_LON)) + geom_smooth(method = "lm", size = 1) + geom_point() + stat_poly_eq(formula = y ~ x, aes(label = paste(..eq.label.., ..rr.label.., ..p.value.label.., sep = "*`,`~")),  parse = TRUE, label.x.npc = "right", vstep = 0.05) +labs(title = paste0(label, " Center of Biomass Longitude over Time"), x = "Date", y = "Latitude") + my_theme()
+    p3 <- ggplot(data = df2, mapping = aes(x = year, y = avsst)) + geom_smooth(method = "lm", size = 1) + geom_point() + stat_poly_eq(formula = y ~ x, aes(label = paste(..eq.label.., ..rr.label.., ..p.value.label.., sep = "*`,`~")),  parse = TRUE, label.x.npc = "right", vstep = 0.05) + labs(title = paste0(label, " Center of Biomass Surface Temperature over Time"), x = "Date", y = "Temperature (Degrees C)") + my_theme()
+    p4 <- ggplot(data = df2, mapping = aes(x = year, y = avdepth)) + geom_smooth(method = "lm", size = 1) + geom_point() + stat_poly_eq(formula = y ~ x, aes(label = paste(..eq.label.., ..rr.label.., ..p.value.label.., sep = "*`,`~")),  parse = TRUE, label.x.npc = "right", vstep = 0.05) + labs(title = paste0(label, " Center of Biomass Depth over Time"), x = "Date", y = "Depth (meters)") + my_theme()
     plot_grid(p1, p2, p3, p4, ncol = 2, nrow = 2)
     
   })

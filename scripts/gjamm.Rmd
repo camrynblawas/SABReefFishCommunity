@@ -29,14 +29,23 @@ Variables we could include:
 ```{r}
 names(fishdf)
 #there are significantly fewer rows with maturity descriptions 
-fishdf <- fishdf %>% dplyr::select(date, year, month, accepted_name, family, station, latitude, longitude, depth, sbt, sst, num_cpue, wgt_cpue)
+fishdf <- fishdf %>% dplyr::filter(station == "29M4") %>% dplyr::select(date, year, month, day, accepted_name, family, station, latitude, longitude, depth, sbt, sst, num_cpue, wgt_cpue)
+```
+
+#Xdata (explanatory) and ydata (response)
+```{r}
+xdata <- fishdf %>% dplyr::select(year, month, day, depth, sbt, sst)
+ydata_long <- fishdf %>% dplyr::select(accepted_name, num_cpue, station, date)
+ydata <- ydata_long %>% group_by(accepted_name) %>% mutate(row = row_number()) %>% pivot_wider(names_from = accepted_name, values_from = num_cpue) %>% dplyr::select(-c(station, date, row))
+ydata[is.na(ydata)] <- 0
 ```
 
 #Start model
 ```{r}
-f   <- gjamSimData( n = 500, S = 10, typeNames = 'CA' )
-ml  <- list( ng = 1000, burnin = 200, typeNames = f$typeNames )
-out <- gjam( f$formula, f$xdata, f$ydata, modelList = ml )
-pl  <- list( trueValues = f$trueValues, GRIDPLOTS = T )
-gjamPlot( output = out, plotPars = pl )
+ml <- list(ng = 1000, burnin = 500, typeNames = 'CA')
+out <- gjam(formula = ~year + month + day + depth + sbt + sst, xdata = xdata, ydata = ydata, modelList = ml)
+
+save(out1, file='out_SEUS.Rdata')
+plotPars <- list(PLOTALLY=T, SAVEPLOTS = T, SMALLPLOTS = T, GRIDPLOTS = T, outFolder = 'out1')
+gjamPlot(out1, plotPars=plotPars)
 ```
